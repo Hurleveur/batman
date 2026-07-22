@@ -16,7 +16,7 @@ code isn't bloated — good code, still the wrong week.
 Batman is the one that asks the rude question: **is this worth an hour of your
 life?** He isn't the assistant you want. Nobody wants to be told the last two
 hours were a waste. He's the one you're glad was there when you check what he
-saved you.
+saved you. He isn't the hero we deserve, he's the one we need.
 
 ```
 /plugin marketplace add Hurleveur/batman
