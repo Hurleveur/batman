@@ -2,6 +2,8 @@
 
 **The plugin watches your time, not your code.**
 
+<img src="code batman.png" width=500>
+
 Every developer I know loses days the same way. Two hours nudging text sizing an
 AI can't see. A weekend rebuilding a library that already has four thousand
 stars. A month on the side project while the one that mattered goes cold. The
