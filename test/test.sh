@@ -57,6 +57,14 @@ OUT=$(jq -n --arg c "$TMP/fresh" '{session_id:"t2",cwd:$c,transcript_path:""}' \
   | bash hooks/batman.sh session-start | jq -r '.hookSpecificOutput.additionalContext')
 has "$OUT" "batman-new" "empty project nudges the new-project ritual"
 
+# a lived-in dir with no git (e.g. $HOME) is NOT a new project
+mkdir -p "$TMP/lived-in"
+touch "$TMP/lived-in"/f{1,2,3,4}
+OUT=$(jq -n --arg c "$TMP/lived-in" '{session_id:"t4",cwd:$c,transcript_path:""}' \
+  | bash hooks/batman.sh session-start | jq -r '.hookSpecificOutput.additionalContext')
+case "$OUT" in *batman-new*) no "non-empty dir without git nudged the new-project ritual";;
+  *) ok "non-empty dir without git is not a new project";; esac
+
 printf '# Why test\nProblem: checking WHY.md is read.\n' > "$TMP/fresh/WHY.md"
 OUT=$(jq -n --arg c "$TMP/fresh" '{session_id:"t3",cwd:$c,transcript_path:""}' \
   | bash hooks/batman.sh session-start | jq -r '.hookSpecificOutput.additionalContext')

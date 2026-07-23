@@ -14,6 +14,7 @@ BATMAN — watches your time, not your code
                      do it well) · stuck too long · drift · wrong project
 
   /batman-new        before a new project: does it exist, why build it, write WHY.md
+  /batman-why        write or refresh WHY.md on a project that already exists
   /batman-report     where the week actually went, from session transcripts
   /batman-help       this card
   "batman off"       stand down for the session

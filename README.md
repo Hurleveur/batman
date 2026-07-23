@@ -42,8 +42,9 @@ Overrule him and he drops it — and snoozes his own timer so he doesn't nag.
 Two hooks, both cheap bash. No daemon, no telemetry, no database.
 
 **On session start** — Batman wakes up. If the project has a `WHY.md`, it goes
-in as the north star. If the directory is empty or has no commits, he points at
-the new-project ritual before you write code.
+in as the north star. If the directory is empty *and* has no commits, he points at
+the new-project ritual before you write code — a lived-in scratch dir like `$HOME`
+has no commits either, and a nudge that fires every session is a nudge nobody reads.
 
 **On every prompt** — a fast check of how long this session has run and how big
 the context has grown. Under the thresholds: silence, nothing added. Over them,
@@ -71,6 +72,10 @@ off and the next warning is pushed 30 minutes out.
    does the smallest useful version look like.
 3. **Write `WHY.md`.** Under 20 lines. That file is what drift is measured
    against for the life of the project.
+
+Steps 2 and 3 are `/batman-why`, which you can run on its own: a project that
+already exists and never got a north star, or one whose real reason has moved on
+since. No search, no verdict — just the questions and the file.
 
 Two rounds of questions, not twenty. For a real interrogation of a plan, Batman
 hands off to [grill-me](https://github.com/RobMitt/grill-me-skill) if you have
@@ -104,6 +109,7 @@ telling an AI to nudge text it cannot see.
 | | |
 |---|---|
 | `/batman-new` | Does it exist, why build it, write `WHY.md` |
+| `/batman-why` | Write or refresh `WHY.md` on a project that already exists |
 | `/batman-report [days]` | Where the time went, and the stuck signals |
 | `/batman-help` | The card |
 | `batman off` | Stand down for this session |

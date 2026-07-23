@@ -49,10 +49,12 @@ if [ "$MODE" = session-start ]; then
 This project's north star (WHY.md) — compare the work against it, not against vibes:
 $(head -20 "$CWD/WHY.md")"
   elif [ -n "$CWD" ] && [ -d "$CWD" ]; then
-    # New project = no git history, or a near-empty directory.
+    # New project = no git history AND a near-empty directory. Both, not either:
+    # $HOME and other working dirs have no commits but plenty in them, and a
+    # nudge that fires every session is a nudge nobody reads.
     commits=$(git -C "$CWD" rev-list --count HEAD 2>/dev/null || echo 0)
     files=$(find "$CWD" -maxdepth 1 -mindepth 1 ! -name '.*' 2>/dev/null | wc -l)
-    if [ "$commits" -eq 0 ] || [ "$files" -le 2 ]; then
+    if [ "$commits" -eq 0 ] && [ "$files" -le 2 ]; then
       CTX="$CTX
 
 New or empty project, and no WHY.md. Before writing code, use the batman-new skill:

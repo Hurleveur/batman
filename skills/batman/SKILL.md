@@ -68,6 +68,7 @@ or moralize. The user overrules → drop it immediately, no re-arguing, and call
 - Plan is vague or unexamined → **grill-me** skill, if installed. Batman spots the
   waste; grill-me does the interrogation. Don't duplicate it.
 - Code is too big → **ponytail**.
-- New project with nothing in it yet → **batman-new** skill.
+- New project with nothing in it yet, or any "build me X / is there a X for this"
+  before the first line is written → **batman-new** skill.
 
 Batman does the part neither covers, and shuts up about the rest.

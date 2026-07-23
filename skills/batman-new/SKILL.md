@@ -1,11 +1,15 @@
 ---
 name: batman-new
-description: The ritual before a new project or a significant new feature — check whether it already exists, capture why it should exist, and write WHY.md. Use when starting a new repo, an empty directory, a fresh feature branch, or when the user says "new project", "let's build X", "/batman-why", or the SessionStart hook reports an uninitialized project.
+description: The ritual before a new project or a significant new feature — check whether it already exists, capture why it should exist, and write WHY.md. Use when starting a new repo, an empty directory, a fresh feature branch, or the SessionStart hook reports an uninitialized project. Also whenever the user proposes building something before it exists, in any phrasing — "new project", "let's build X", "should I build X", "can you make me a X", "is there a plugin/tool/script/library for X", "existing or new", "write a X that", "I need something that does X", "/batman-new". A question about whether X is possible is a build request; run the search half (step 1) even when the WHY.md half is overkill.
 ---
 
 # Batman — new project
 
 Three questions. Five minutes. Costs less than the weekend you'd lose.
+
+Step 1 stands alone. Scratch work, a throwaway script, a directory that will never
+be a project — run the search, skip 2 and 3. Never skip the search: it is the half
+that saves the weekend.
 
 ## 1. Does it exist already?
 
@@ -26,38 +30,13 @@ BUILD IT   — closest is <repo>, which doesn't do <thing>. That gap is real.
 If the verdict is USE IT and the user builds anyway, that's their call — note it
 in WHY.md and never raise it again.
 
-## 2. Why does it exist?
+## 2. Why does it exist, and write it down
 
-Ask the user, plainly. Don't accept the first answer if it's a restatement of the
-idea ("a plugin that tracks time" is *what*, not *why*).
+Use the **batman-why** skill: it asks the two questions and writes `WHY.md`. Carry
+the search result in with you — the closest match found above is the
+`Already exists:` line, and it's the line that stops this getting rebuilt again in
+six months.
 
-- Who hits this problem? You, a team, strangers?
-- What happens if it never gets built?
-- What does done look like — the smallest version that's already useful?
-
-Two rounds of this, max. **Deeper interrogation belongs to grill-me** — if the
-plan is fuzzy or the user wants a real beating, hand off to that skill and let it
-work. Batman is the door, not the interrogation room.
-
-## 3. Write it down
-
-Create `WHY.md` at the project root. Short — if it's over 20 lines it's a design
-doc, not a north star:
-
-```markdown
-# Why <project>
-
-**Problem:** <one sentence, in the user's words>
-**For:** <who>
-**Done looks like:** <smallest useful version>
-**Already exists:** <closest thing found, and why it isn't enough>
-**Explicitly not doing:** <the tempting thing that isn't the point>
-
-Started <YYYY-MM-DD>.
-```
-
-That file is what Batman checks drift against for the life of the project. Keep
-it current: when the answer changes, edit it — a stale WHY.md is worse than none.
-
-If the user won't answer, don't invent one. Write `WHY.md` with the problem line
-only and move on. Half a north star still beats none.
+That file is what Batman checks drift against for the life of the project. Keep it
+current: when the answer changes, run batman-why again — a stale WHY.md is worse
+than none.
