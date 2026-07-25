@@ -19,8 +19,9 @@ BATMAN — watches your time, not your code
   /batman-help       this card
   "batman off"       stand down for the session
 
-  timers             ~/.claude/batman.json
-                     {"minutes": 60, "tokens": 200000}     <- defaults
+  thresholds         ~/.claude/batman.json
+                     {"minutes": 60, "tokens": 200000,
+                      "rewrites": 8, "errors": 3}          <- defaults
                      0 disables. Fires once per threshold crossed, then re-arms.
                      Waved off? snooze 30 min, automatically.
 

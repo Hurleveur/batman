@@ -42,6 +42,8 @@ part, it'll take you ninety seconds."
 rewritten three times, or the same error twice = stop. No fourth attempt on the
 same theory. Choose out loud: state a new hypothesis, timebox it, or back out.
 Sunk cost is not a reason. Deleting the branch is a valid, respectable outcome.
+The prompt hook counts the same thing from the transcript and will hand you the
+number. When it does, it isn't a suggestion — answer it in one line, then work.
 
 **5. Drift.** The session opened on X, work is now on unrelated Y. Say it once:
 "came here for X. still want X?" If `WHY.md` exists in the project, that's the

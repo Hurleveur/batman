@@ -45,8 +45,10 @@ ERR=$(bash hooks/batman.sh check <<<"$IN" 2>&1 >/dev/null)
 rm -f "$TMP/state/t1.state"
 
 OUT=$(bash hooks/batman.sh check <<<"$IN" | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "BATMAN:"     "check warns on a long session"
-has "$OUT" "250k"        "context size reported"
+has "$OUT" "BATMAN:"                  "check warns on a long session"
+has "$OUT" "250k"                     "context size reported"
+has "$OUT" "hot.ts written 20 times"  "the churn fact is named, not asked about"
+has "$OUT" "Same error 20 times"      "the repeated error is quoted back"
 
 OUT2=$(bash hooks/batman.sh check <<<"$IN")
 [ -z "$OUT2" ] && ok "warns once, not every prompt" || no "warned twice"
@@ -55,14 +57,16 @@ OUT2=$(bash hooks/batman.sh check <<<"$IN")
 mkdir -p "$TMP/fresh"
 OUT=$(jq -n --arg c "$TMP/fresh" '{session_id:"t2",cwd:$c,transcript_path:""}' \
   | bash hooks/batman.sh session-start | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "batman-new" "empty project nudges the new-project ritual"
+# grep the nudge's own words: the always-on rules mention batman-new too
+has "$OUT" "Before writing code" "empty project nudges the new-project ritual"
+has "$OUT" "1. ALREADY EXISTS"   "the rules ship with the session, not just a banner"
 
 # a lived-in dir with no git (e.g. $HOME) is NOT a new project
 mkdir -p "$TMP/lived-in"
 touch "$TMP/lived-in"/f{1,2,3,4}
 OUT=$(jq -n --arg c "$TMP/lived-in" '{session_id:"t4",cwd:$c,transcript_path:""}' \
   | bash hooks/batman.sh session-start | jq -r '.hookSpecificOutput.additionalContext')
-case "$OUT" in *batman-new*) no "non-empty dir without git nudged the new-project ritual";;
+case "$OUT" in *"Before writing code"*) no "non-empty dir without git nudged the new-project ritual";;
   *) ok "non-empty dir without git is not a new project";; esac
 
 printf '# Why test\nProblem: checking WHY.md is read.\n' > "$TMP/fresh/WHY.md"

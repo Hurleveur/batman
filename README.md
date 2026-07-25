@@ -41,22 +41,28 @@ Overrule him and he drops it — and snoozes his own timer so he doesn't nag.
 
 Two hooks, both cheap bash. No daemon, no telemetry, no database.
 
-**On session start** — Batman wakes up. If the project has a `WHY.md`, it goes
-in as the north star. If the directory is empty *and* has no commits, he points at
-the new-project ritual before you write code — a lived-in scratch dir like `$HOME`
-has no commits either, and a nudge that fires every session is a nudge nobody reads.
+**On session start** — the six signals go in, in full. Not a banner announcing a
+mode: the actual rules, because a skill file nobody loads changes nothing. If the
+project has a `WHY.md`, it goes in as the north star. If the directory is empty
+*and* has no commits, he points at the new-project ritual before you write code —
+a lived-in scratch dir like `$HOME` has no commits either, and a nudge that fires
+every session is a nudge nobody reads.
 
-**On every prompt** — a fast check of how long this session has run and how big
-the context has grown. Under the thresholds: silence, nothing added. Over them,
-*once*: is this still the thing that matters, and has an approach failed three
-times? On track → he says nothing at all.
+**On every prompt** — one pass over the session transcript: the same file rewritten
+over and over, the same error hit again and again, active minutes (gaps capped at
+five, so a session resumed tomorrow isn't "4287 minutes"), context size. Under the
+thresholds: silence, nothing added. Over them, *once*, he names the number —
+"sync.ts written 12 times this session" — and asks for a new theory, a timebox, or
+the exit. Facts, not a request to introspect. Asking an agent whether it's stuck
+gets you a confident no; showing it the count doesn't.
 
 The interesting moment is mid-session, not at the end. By the time a session
 closes, the hours are already gone.
 
 ```jsonc
 // ~/.claude/batman.json — optional, these are the defaults
-{ "minutes": 60, "tokens": 200000 }   // 0 disables either
+{ "minutes": 60, "tokens": 200000,    // 0 disables either
+  "rewrites": 8, "errors": 3 }        // churn + repeated-error thresholds
 ```
 
 Fires once per threshold crossed, then re-arms at the next multiple. Wave him
