@@ -97,6 +97,35 @@ Two rounds of questions, not twenty. For a real interrogation of a plan, Batman
 hands off to [grill-me](https://github.com/RobMitt/grill-me-skill) if you have
 it — no point owning that twice.
 
+## Your standing WHY.md
+
+`~/.claude/WHY.md` — the one that applies when the directory you're in has none of
+its own. That's most sessions, and `$HOME` especially, where there's no project to
+drift *from*.
+
+It answers a different question than a project's. A project `WHY.md` is "is this
+feature in scope". The standing one is "is this the right thing at all, today".
+Write it that way:
+
+- **The work, in priority order.** Naming second and third place is the point.
+  First place is easy, and it's never the one you drift onto.
+- **What is explicitly not the work.** The plumbing, the tool you'd rather polish
+  than use, the repos that are archive now. This is the half that earns its keep.
+- **Link your todo lists — don't copy them in.** Whatever you use: a `todo.md` in
+  an Obsidian vault, a project kanban, GitHub issues. Say where each lives *and
+  what it means*, because they are rarely the same kind of list — one holds
+  project priorities, another holds errands, and Batman comparing your afternoon
+  against "book the dentist" is noise. A list pasted in here is stale in a week,
+  and this file goes into every session that lacks a project `WHY.md`.
+- **Drift tells, in your own words.** What your wrong turn actually looks like.
+- **Under 30 lines.** That's what gets read.
+
+Nothing follows those links automatically — Batman points, you look. A hook that
+pulls today's open items in at session start is maybe fifteen lines, and it isn't
+here because nobody has needed it enough to say so. If that's you, open an issue.
+
+Override the path with `$BATMAN_WHY`. A project's own `WHY.md` always wins.
+
 ## Where the week went
 
 ```
