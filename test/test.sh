@@ -11,8 +11,8 @@ no() { echo "  FAIL $1"; FAIL=1; }
 has() { grep -q -- "$2" <<<"$1" && ok "$3" || { no "$3"; echo "--- got ---"; echo "$1"; }; }
 
 # --- fixture: one session, 40 min, a file rewritten 6x, same error 3x --------
-mk() { # mk <dir> <cwd> <start_epoch>
-  local d="$TMP/projects/$1"; mkdir -p "$d"; local f="$d/s.jsonl" t=$3
+mk() { # mk <dir> <cwd> <start_epoch> [basename]
+  local d="$TMP/projects/$1"; mkdir -p "$d"; local f="$d/${4:-s}.jsonl" t=$3
   : > "$f"
   for i in $(seq 0 19); do
     ts=$(date -u -d "@$((t + i * 120))" +%Y-%m-%dT%H:%M:%S.000Z)
@@ -23,7 +23,9 @@ mk() { # mk <dir> <cwd> <start_epoch>
   # pad past the 1k size filter
   printf '{"type":"ai-title","aiTitle":"%s"}\n' "$(head -c 900 /dev/zero | tr '\0' 'x')" >> "$f"
 }
-mk proj-a /home/u/proj-a "$(date -d '1 day ago' +%s)"
+# Today, deliberately: the hook's clock counts from midnight, so a fixture dated
+# yesterday would make every clock assertion below pass by reading zero.
+mk proj-a /home/u/proj-a "$(date +%s)"
 
 OUT=$(bash scripts/report.sh 7 "$TMP/projects")
 has "$OUT" "proj-a"            "report finds the project"
@@ -59,7 +61,7 @@ OUT2=$(bash hooks/batman.sh check <<<"$IN")
 [ -z "$OUT2" ] && ok "warns once, not every prompt" || no "warned twice"
 
 # --- steering: long opening briefs, one-liners by the end -------------------
-d="$TMP/projects/proj-b"; mkdir -p "$d"; f="$d/s.jsonl"; t=$(date -d '1 day ago' +%s)
+d="$TMP/projects/proj-b"; mkdir -p "$d"; f="$d/s.jsonl"; t=$(date +%s)
 for i in $(seq 0 8); do
   ts=$(date -u -d "@$((t + i * 120))" +%Y-%m-%dT%H:%M:%S.000Z)
   # first third long, rest one-liners; the injections must be ignored, not averaged in
@@ -72,6 +74,85 @@ echo '{"minutes":1,"tokens":200000}' > "$BATMAN_CONF"
 OUT=$(jq -n --arg tp "$f" '{session_id:"t5",cwd:"/p",transcript_path:$tp}' \
   | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
 has "$OUT" "Prompts opened ~400 chars, latest third ~2" "steering collapse is measured and named"
+echo '{"minutes":60,"tokens":200000}' > "$BATMAN_CONF"
+
+# --- the clock spans today's sessions ---------------------------------------
+# Two transcripts, same project, 38 active minutes each. Per-session the limit is never
+# crossed and Batman says nothing; across the day it is 76 and he should.
+mk proj-x /home/u/proj-x "$(date +%s)" a
+mk proj-x /home/u/proj-x "$(date +%s)" b
+TPX="$TMP/projects/proj-x/a.jsonl"
+OUT=$(jq -n --arg tp "$TPX" '{session_id:"t-x1", cwd:"/home/u/proj-x", transcript_path:$tp}' \
+  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
+has "$OUT" "76 active minutes on this today, 38 in this session" \
+  "the clock counts today's other sessions, not just this one"
+
+# One transcript alone keeps the original wording — nothing to disambiguate.
+OUT=$(jq -n --arg tp "$TP" '{session_id:"t-x2", cwd:"/home/u/proj-a", transcript_path:$tp}' \
+  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
+grep -q "in this session" <<<"$OUT" && no "a lone session is not dressed up as a day" \
+  || ok "a lone session is not dressed up as a day"
+
+# --- yesterday's minutes are not today's ------------------------------------
+# The file filter is mtime, which says "touched today". The sum is timestamps, which
+# say "worked today". Reading the first as the second charged a real morning with the
+# 42 minutes of the previous afternoon, because the session had merely been resumed.
+# `old` is written now, so it passes the mtime filter exactly as a resumed session does.
+mk proj-y /home/u/proj-y "$(date -d '1 day ago' +%s)" old
+mk proj-y /home/u/proj-y "$(date +%s)" new
+echo '{"minutes":1,"tokens":200000}' > "$BATMAN_CONF"
+OUT=$(jq -n --arg tp "$TMP/projects/proj-y/new.jsonl" \
+    '{session_id:"t-y1", cwd:"/home/u/proj-y", transcript_path:$tp}' \
+  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
+has "$OUT" "38 active minutes" "a transcript touched today but written yesterday counts zero"
+case "$OUT" in *"76 active"*) no "yesterday's session is not summed into today";;
+  *) ok "yesterday's session is not summed into today";; esac
+
+# The same file as the open session: its own yesterday minutes drop out too.
+OUT=$(jq -n --arg tp "$TMP/projects/proj-y/old.jsonl" \
+    '{session_id:"t-y2", cwd:"/home/u/proj-y", transcript_path:$tp}' \
+  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
+has "$OUT" "0 in this session" "an overnight session contributes only its today half"
+echo '{"minutes":60,"tokens":200000}' > "$BATMAN_CONF"
+
+# --- bare-name entry points -------------------------------------------------
+# ${CLAUDE_PLUGIN_ROOT} is empty outside hooks.json, so skills call these by name.
+OUT=$(bin/batman-report 7 "$TMP/projects" 2>&1)
+has "$OUT" "proj-a"  "batman-report runs without CLAUDE_PLUGIN_ROOT"
+echo "60 0 0 0" > "$TMP/state/t-snooze.state"
+bin/batman-snooze 45 >/dev/null 2>&1
+read -r SNZ _ < "$TMP/state/t-snooze.state"
+[ "$SNZ" = 105 ] && ok "batman-snooze pushes the floor out" \
+  || no "batman-snooze pushes the floor out (got $SNZ, want 105)"
+
+# --- ActivityWatch clause ---------------------------------------------------
+# Stubbed, because the real one needs aw-server and this suite must run anywhere.
+# What is under test is the wiring: that it rides the warning instead of opening a
+# line of its own, and that a missing script changes nothing.
+printf '#!/bin/sh\necho " 130 active minutes on proj-a today across all sessions (ActivityWatch)."\n' > "$TMP/aw.sh"
+chmod +x "$TMP/aw.sh"
+echo "{\"minutes\":60,\"tokens\":200000,\"aw\":\"$TMP/aw.sh\"}" > "$BATMAN_CONF"
+OUT=$(jq -n --arg tp "$TP" '{session_id:"t-aw1", cwd:"/home/u/proj-a", transcript_path:$tp}' \
+  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
+has "$OUT" "130 active minutes on proj-a" "activitywatch clause rides the warning"
+has "$OUT" "signal 4, stuck"              "it appends to the stuck line, never replaces it"
+[ "$(jq -n --arg tp "$TP" '{session_id:"t-aw1b", cwd:"/home/u/proj-a", transcript_path:$tp}' \
+    | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext' \
+    | grep -c "ActivityWatch")" = 1 ] \
+  && ok "clause appears once, not once per signal" || no "clause appears once, not once per signal"
+
+echo '{"minutes":60,"tokens":200000,"aw":"/nope/not-here"}' > "$BATMAN_CONF"
+OUT=$(jq -n --arg tp "$TP" '{session_id:"t-aw2", cwd:"/home/u/proj-a", transcript_path:$tp}' \
+  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
+has "$OUT" "tokens of context"  "missing activitywatch script leaves the warning intact"
+grep -q "ActivityWatch" <<<"$OUT" && no "silent when the script is absent" || ok "silent when the script is absent"
+
+if command -v python3 >/dev/null; then
+  OUT=$(bin/batman-time --selftest 2>&1)
+  has "$OUT" "selftest ok" "batman-time interval math self-checks"
+else
+  ok "batman-time selftest skipped (no python3)"
+fi
 echo '{"minutes":60,"tokens":200000}' > "$BATMAN_CONF"
 
 # empty project with no WHY.md -> new-project nudge

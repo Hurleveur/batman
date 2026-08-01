@@ -1,0 +1,12 @@
+#!/bin/sh
+# Bare-name entry point for the report, so no skill has to spell a path.
+#
+# ${CLAUDE_PLUGIN_ROOT} is expanded inside hooks.json command strings, but it is NOT set
+# in the environment the Bash tool runs in. A skill that says
+#   bash ${CLAUDE_PLUGIN_ROOT}/scripts/report.sh 7
+# therefore runs `bash /scripts/report.sh 7` and dies on "No such file or directory".
+# bin/ is on PATH for an installed plugin, so this resolves with no variable at all.
+#
+# Args are passed through: [days] [transcript-root]
+SELF=$(readlink -f "$0" 2>/dev/null || echo "$0")
+exec bash "$(dirname "$SELF")/../scripts/report.sh" "$@"

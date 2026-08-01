@@ -8,8 +8,17 @@ description: Show where time actually went across projects, from Claude Code ses
 Run it:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/report.sh 7    # days, default 7
+batman-report 7    # days, default 7
 ```
+
+Bare name, no path: the plugin's `bin/` is on PATH. Do not spell it
+`${CLAUDE_PLUGIN_ROOT}/scripts/report.sh` — that variable is empty in the Bash
+tool's environment and the command dies on `/scripts/report.sh: No such file`.
+
+If the user runs ActivityWatch, `batman-time --all` adds today's real desk time
+per project — transcripts only see the minutes Claude was in the room, and cap
+gaps at five, so hand-testing and non-Claude work are missing from the numbers
+above. Skip it silently if the command prints nothing; it is optional.
 
 Then read it back in **three lines, maximum**:
 

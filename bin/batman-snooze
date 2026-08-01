@@ -1,0 +1,8 @@
+#!/bin/sh
+# Bare-name snooze, for the same reason as batman-report: ${CLAUDE_PLUGIN_ROOT} is empty
+# in the Bash tool's environment, so a skill cannot spell the path to batman.sh that way.
+#
+#   batman-snooze [minutes]   (default 30)
+# bash, not sh: batman.sh uses `set -o pipefail`, which dash rejects outright.
+SELF=$(readlink -f "$0" 2>/dev/null || echo "$0")
+exec bash "$(dirname "$SELF")/../hooks/batman.sh" snooze "${1:-30}"

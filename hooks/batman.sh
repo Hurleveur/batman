@@ -138,15 +138,22 @@ HOT_LIMIT=$(conf rewrites 8)
 ERR_LIMIT=$(conf errors 3)
 [ "$MINS_LIMIT" -gt 0 ] 2>/dev/null || quiet
 
-FACTS=$(jq -n -r -R '
+# Local midnight. Every clock below counts from here, so "today" means today.
+MID=$(date -d 00:00 +%s 2>/dev/null || echo 0)
+
+FACTS=$(jq -n -r -R --argjson mid "${MID:-0}" '
   [inputs | fromjson?] as $e
   | ($e | map(.timestamp // empty) | sort
      | map(sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) as $t
   | ($t | length) as $n
-  # Active minutes, gaps capped at 5 min. Wall-clock lies: a session resumed the next
-  # day reported "4287 minutes" after an hour of work, and got ignored for it.
+  # Active minutes since midnight, gaps capped at 5 min. Both bounds are load-bearing.
+  # Wall-clock lies: a session resumed the next day reported "4287 minutes" after an
+  # hour of work, and got ignored for it. A whole-file sum lies the same way, quieter —
+  # a real transcript opened 16:09 the previous afternoon and picked up again the next
+  # morning totalled 85 minutes, of which 43 belonged to the day being reported.
   | (if $n < 2 then 0 else
-      [range(1; $n)] | map(($t[.] - $t[.-1]) | if . > 300 then 300 else . end) | add
+      ([range(1; $n)] | map(select($t[.] >= $mid)
+        | ($t[.] - $t[.-1]) | if . > 300 then 300 else . end) | add) // 0
     end) as $active
   | ($e | map(select(.type == "assistant") | .message.content[]?
       | select(.type == "tool_use" and (.name | test("^(Edit|Write|NotebookEdit)$")))
@@ -174,6 +181,27 @@ FACTS=$(jq -n -r -R '
 IFS=$'\t' read -r ACTIVE HOTF HOTN ERRK ERRN EARLY LATE <<<"$FACTS"
 ACTIVE=${ACTIVE:-0}; HOTN=${HOTN:-0}; ERRN=${ERRN:-0}; EARLY=${EARLY:-0}; LATE=${LATE:-0}
 
+# The clock, across today's sessions. $ACTIVE above is this transcript alone, so a day
+# split over four sessions reads as four short ones — measured on a real one: 46 minutes
+# in the open session, 92 across the four together. Same project directory, same jq,
+# same midnight cutoff. Churn, errors and steering stay per-session on purpose: those are
+# about this attempt, not the day. ponytail: one jq per sibling, ~0.13s for four. The
+# mtime test only skips files cheaply — a transcript touched today but written yesterday
+# still sums to zero, because the cutoff is applied to the timestamps, not the file.
+SIBS=$(find "$(dirname "$TP")" -name '*.jsonl' -newermt "$(date +%Y-%m-%d)" ! -path "$TP" -print0 2>/dev/null \
+  | while IFS= read -r -d '' f; do
+      jq -n -r -R --argjson mid "${MID:-0}" '[inputs | fromjson?] as $e
+        | ($e | map(.timestamp // empty) | sort
+           | map(sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) as $t
+        | ($t | length) as $n
+        | (if $n < 2 then 0 else
+            ([range(1; $n)] | map(select($t[.] >= $mid)
+              | ($t[.] - $t[.-1]) | if . > 300 then 300 else . end) | add) // 0
+          end)' "$f" 2>/dev/null
+    done | awk '{s+=$1} END {printf "%d", s/60}')
+SIBS=${SIBS:-0}
+ACTIVE_ALL=$(( ACTIVE + SIBS ))
+
 TOKS=$(tail -80 "$TP" 2>/dev/null | jq -r 'select(.type=="assistant") | .message.usage
   | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)' 2>/dev/null \
   | sort -rn | head -1)
@@ -193,9 +221,15 @@ if [ "$ERRN" -ge $((FERR + ERR_LIMIT)) ]; then
   FERR=$ERRN
   STUCK="$STUCK Same error $ERRN times: \"$ERRK\"."
 fi
-if [ "$ACTIVE" -ge $((FMIN + MINS_LIMIT)) ]; then
-  FMIN=$(( ACTIVE / MINS_LIMIT * MINS_LIMIT ))
-  DRAG=" $ACTIVE active minutes."
+if [ "$ACTIVE_ALL" -ge $((FMIN + MINS_LIMIT)) ]; then
+  FMIN=$(( ACTIVE_ALL / MINS_LIMIT * MINS_LIMIT ))
+  # Name both numbers when they differ: "23 this session" is the one that feels true,
+  # and it is the one that has been hiding the day.
+  if [ "$SIBS" -gt 0 ]; then
+    DRAG=" $ACTIVE_ALL active minutes on this today, $ACTIVE in this session."
+  else
+    DRAG=" $ACTIVE active minutes."
+  fi
 fi
 if [ "$TOKS" -ge $((FTOK + TOKS_LIMIT)) ]; then
   FTOK=$(( TOKS / TOKS_LIMIT * TOKS_LIMIT ))
@@ -212,6 +246,19 @@ echo "$FMIN $FTOK $FHOT $FERR" > "$STATE"
 STEER_LIMIT=$(conf steering 40)
 if [ "$EARLY" -gt 0 ] && [ "$((LATE * 100 / EARLY))" -lt "$STEER_LIMIT" ]; then
   DRAG="$DRAG Prompts opened ~$EARLY chars, latest third ~$LATE."
+fi
+
+# ActivityWatch, where it is running. Same deal as steering: rides an emission that was
+# already happening, never opens one. $ACTIVE_ALL now covers the day, so only one blind
+# spot is left, and it is the one no transcript can close: gaps are capped at 5 minutes
+# because a hole in the timestamps is either an hour of hand-testing or an hour at lunch,
+# and nothing in the file says which. An idle detector does. That is all this asks about
+# — measured against the day's total, so it stays quiet unless there is real work off the
+# transcript. Quiet too when aw-server is not running: it is per-machine, and ~/.claude
+# syncs between boxes while ActivityWatch's data does not.
+AW=$(conf aw "$(dirname "$SELF")/../bin/batman-time")
+if [ -n "$CWD" ] && [ -x "$AW" ]; then
+  DRAG="$DRAG$(timeout 5 "$AW" --hook "$CWD" "$ACTIVE_ALL" 2>/dev/null)"
 fi
 
 # Churn outranks the clock: it is evidence, the clock is only a prior.

@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Batman-scoped ActivityWatch reader: active time per project, and the current stretch.
+
+Deliberately narrow. Only *terminal* window titles are read — they carry the working
+directory as "<dir> : <cmd> — Konsole". Every other app contributes nothing: browser,
+media, chat, mail and Obsidian titles are never fetched into the aggregation.
+
+Time is AFK-filtered, so "1h20m" means 1h20m at the keyboard with a terminal focused,
+not 1h20m of wall clock with the window left open.
+
+  batman-time                        current stretch + today, for $PWD's project
+  batman-time saving-world           same, for a named project
+  batman-time --all                  today's per-project breakdown
+  batman-time --hook <cwd> <mins>    one clause for batman.sh, or nothing
+  batman-time --selftest             run the interval-math checks
+
+Lives in the plugin's bin/, which Claude Code puts on PATH — so it is callable by bare
+name from any session with the plugin installed, no path and no install step.
+
+Exits 0 and stays quiet when aw-server is unreachable. ActivityWatch is per-machine:
+a synced ~/.claude does not bring its data along.
+"""
+
+import datetime as dt
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+HOST = "http://localhost:5600/api/0"
+# Terminals only. Adding a GUI editor here also starts exposing its window titles.
+WORK_APPS = {"konsole", "kitty", "alacritty", "Alacritty", "ghostty", "org.gnome.Terminal"}
+GAP = dt.timedelta(minutes=30)  # no terminal focus for this long = the stretch ended
+LOOKBACK = dt.timedelta(hours=24)
+HOOK_MARGIN = 30  # minutes AW must exceed the transcript by before it is worth a word
+
+
+def _get(path):
+    # urlencode is load-bearing: a raw "+00:00" in the query decodes to a space and
+    # aw-server answers 500. The trailing slash on /buckets/ matters too (404 without).
+    return json.load(urllib.request.urlopen(f"{HOST}/{path}", timeout=10))
+
+
+def fetch(since):
+    """(window events, not-afk spans) since `since`. Buckets found by type, not hostname."""
+    now = dt.datetime.now(dt.timezone.utc)
+    q = urllib.parse.urlencode({"start": since.isoformat(), "end": now.isoformat(), "limit": -1})
+    ids = {b["type"]: b["id"] for b in _get("buckets/").values()}
+    win = _get(f"buckets/{ids['currentwindow']}/events?{q}")
+    afk = _get(f"buckets/{ids['afkstatus']}/events?{q}")
+    return win, [span(e) for e in afk if e["data"]["status"] == "not-afk"]
+
+
+def span(e):
+    start = dt.datetime.fromisoformat(e["timestamp"])
+    return start, start + dt.timedelta(seconds=e["duration"])
+
+
+def project(title):
+    """'saving-world : claude — Konsole' -> 'saving-world'. Home shows up as '~'."""
+    head = title.rsplit(" — ", 1)[0]
+    return head.split(" : ", 1)[0].strip() or None
+
+
+def work_spans(win, awake):
+    """{project: [(start, end)]} for terminal windows, clipped to not-afk time."""
+    out = {}
+    for e in win:
+        if e["data"]["app"] not in WORK_APPS:
+            continue
+        name = project(e["data"]["title"])
+        if not name:
+            continue
+        a, b = span(e)
+        # ponytail: naive O(events x afk-spans) scan. A day is a few thousand pairs.
+        for c, d in awake:
+            lo, hi = max(a, c), min(b, d)
+            if lo < hi:
+                out.setdefault(name, []).append((lo, hi))
+    return out
+
+
+def merge(spans, gap):
+    """Sort and coalesce spans separated by less than `gap`."""
+    out = []
+    for a, b in sorted(spans):
+        if out and a - out[-1][1] < gap:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def total(spans):
+    return sum((b - a).total_seconds() for a, b in spans)
+
+
+def fmt(sec):
+    h, m = divmod(int(sec // 60), 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m"
+
+
+def cwd_project(path=None):
+    cwd = os.path.realpath(path or os.getcwd())
+    return "~" if cwd == os.path.realpath(os.path.expanduser("~")) else os.path.basename(cwd)
+
+
+def hook_clause(name, mins, seen):
+    """Clause for a batman warning that is already firing, or '' when there's nothing to add.
+
+    Batman counts active minutes from the transcript, but that clock restarts per
+    session_id and caps inter-prompt gaps at 5 minutes. So an afternoon split across
+    three sessions, or an hour of hand-testing between two prompts, both read as
+    minutes. Only speak when the gap between the two clocks is big enough to matter.
+    """
+    if name == "~" or mins - seen < HOOK_MARGIN:
+        return ""
+    return f" {int(mins)} active minutes on {name} today across all sessions (ActivityWatch)."
+
+
+def main(argv):
+    arg = argv[1] if len(argv) > 1 else None
+    midnight = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    since = min(midnight, dt.datetime.now(dt.timezone.utc) - LOOKBACK)
+
+    try:
+        win, awake = fetch(since)
+    except (urllib.error.URLError, OSError, KeyError) as err:
+        # --hook writes onto a line batman is already printing, so it stays silent here:
+        # a diagnostic on stdout would be injected verbatim into the warning.
+        if arg != "--hook":
+            print(f"activitywatch: no data ({type(err).__name__}) — aw-server is per-machine")
+        return 0
+
+    spans = work_spans(win, awake)
+    today_mins = lambda n: total([s for s in spans.get(n, []) if s[0] >= midnight]) / 60
+
+    if arg == "--hook":
+        name = cwd_project(argv[2] if len(argv) > 2 else None)
+        seen = int(argv[3]) if len(argv) > 3 and argv[3].isdigit() else 0
+        print(hook_clause(name, today_mins(name), seen), end="")
+        return 0
+
+    if arg == "--all":
+        rows = sorted(spans.items(), key=lambda kv: -total([s for s in kv[1] if s[0] >= midnight]))
+        for name, ss in rows:
+            today = total([s for s in ss if s[0] >= midnight])
+            if today >= 60:
+                print(f"{fmt(today):>7}  {name}")
+        return 0
+
+    name = arg or cwd_project()
+    ss = spans.get(name, [])
+    if not ss:
+        print(f"{name}: no terminal time in the last 24h")
+        return 0
+
+    today = fmt(total([s for s in ss if s[0] >= midnight]))
+    a, b = merge(ss, GAP)[-1]
+    # Elapsed is wall clock across the stretch; active is the keyboard time inside it.
+    inside = fmt(total([s for s in ss if a <= s[0] < b]))
+    when = lambda d: f"{d.astimezone():%H:%M}" if d.astimezone() >= midnight else f"{d.astimezone():%a %H:%M}"
+    fresh = dt.datetime.now(dt.timezone.utc) - b < GAP
+    stretch = (f"current stretch {fmt(total([(a, b)]))} elapsed / {inside} active, since {when(a)}"
+               if fresh else
+               f"last stretch {fmt(total([(a, b)]))} elapsed / {inside} active, ended {when(b)}")
+    print(f"{name} — {today} active today, {stretch}")
+    return 0
+
+
+def selftest():
+    t = lambda m: dt.datetime(2026, 8, 1, 9, 0, tzinfo=dt.timezone.utc) + dt.timedelta(minutes=m)
+    ev = lambda app, title, m0, dur: {
+        "timestamp": t(m0).isoformat(), "duration": dur * 60, "data": {"app": app, "title": title}}
+
+    assert project("saving-world : claude — Konsole") == "saving-world"
+    assert project("~ : zsh — Konsole") == "~"
+    assert project("a-hyphenated-name : claude — Konsole") == "a-hyphenated-name"
+
+    # AFK clipping: 60min of focus, only 20min of it awake.
+    got = work_spans([ev("konsole", "batcave : claude — Konsole", 0, 60)], [(t(10), t(30))])
+    assert got == {"batcave": [(t(10), t(30))]}, got
+
+    # Non-terminal apps contribute nothing, whatever their title says.
+    assert work_spans([ev("Brave-browser", "secret — Brave", 0, 60)], [(t(0), t(60))]) == {}
+    assert work_spans([ev("obsidian", "Private Note - Obsidian", 0, 60)], [(t(0), t(60))]) == {}
+
+    # A 10min break keeps one stretch; a 40min break splits it.
+    assert merge([(t(0), t(20)), (t(30), t(50))], GAP) == [(t(0), t(50))]
+    assert merge([(t(0), t(20)), (t(60), t(80))], GAP) == [(t(0), t(20)), (t(60), t(80))]
+    # Out-of-order input, and a span fully swallowed by the previous one.
+    assert merge([(t(30), t(50)), (t(0), t(20)), (t(35), t(40))], GAP) == [(t(0), t(50))]
+
+    assert (fmt(0), fmt(90), fmt(3600), fmt(4500)) == ("0m", "1m", "1h00m", "1h15m")
+
+    # Hook clause: speak only when AW knows materially more than the transcript.
+    assert "130 active minutes on saving-world" in hook_clause("saving-world", 130, 60)
+    assert hook_clause("saving-world", 70, 60) == ""    # transcript already has it
+    assert hook_clause("saving-world", 130, 130) == ""  # same clock, nothing to add
+    assert hook_clause("~", 300, 0) == ""           # home merges every project
+    print("selftest ok")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        selftest()
+    else:
+        sys.exit(main(sys.argv))

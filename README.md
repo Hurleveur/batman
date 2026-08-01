@@ -52,8 +52,15 @@ you write code — a lived-in scratch dir like `$HOME` has no commits either, an
 nudge that fires every session is a nudge nobody reads.
 
 **On every prompt** — one pass over the session transcript: the same file rewritten
-over and over, the same error hit again and again, active minutes (gaps capped at
-five, so a session resumed tomorrow isn't "4287 minutes"), context size. Under the
+over and over, the same error hit again and again, context size. Plus the clock, and
+that one reads every transcript for the project, not just the open one — a day broken
+into four sessions used to report as four short ones, and on a real day that was 46
+minutes in the open session against 92 across all of them. Two bounds keep the number
+honest: gaps are capped at five minutes, so a session resumed tomorrow isn't "4287
+minutes", and only timestamps since local midnight count, so a session you opened last
+night and carried on this morning brings its today half and leaves the rest. Churn,
+errors and steering stay per-session on purpose: those are about this attempt, not the
+day. Under the
 thresholds: silence, nothing added. Over them, *once*, he names the number —
 "sync.ts written 12 times this session" — and asks for a new theory, a timebox, or
 the exit. Facts, not a request to introspect. Asking an agent whether it's stuck
@@ -72,11 +79,66 @@ closes, the hours are already gone.
 // ~/.claude/batman.json — optional, these are the defaults
 { "minutes": 60, "tokens": 200000,    // 0 disables either
   "rewrites": 8, "errors": 3,         // churn + repeated-error thresholds
-  "steering": 40 }                    // % of opening prompt length that reads as coasting
+  "steering": 40,                     // % of opening prompt length that reads as coasting
+  "aw": "" }                          // path to batman-time; empty = the bundled one
 ```
 
 Fires once per threshold crossed, then re-arms at the next multiple. Wave him
 off and the next warning is pushed 30 minutes out.
+
+## The clock the transcript can't read
+
+Optional. Does nothing unless you already run
+[ActivityWatch](https://activitywatch.net/) — no install, no config, no daemon of
+Batman's own.
+
+The clock above already spans the day, every session of it. So this adds nothing
+there — what it adds is everything that never reached a transcript, and that turns
+out to be three specific things:
+
+- **The work between prompts.** Hand-testing a build, reading logs, twenty minutes
+  in `nvim`, waiting on a deploy. The transcript caps every gap at five minutes,
+  and it has to: a forty-minute hole is either that work or it's lunch, and nothing
+  in the file says which. An idle detector knows.
+- **The work with no session at all.** An afternoon on the project without Claude
+  open leaves no transcript. As far as Batman is concerned it never happened.
+- **Whether you were actually there.** Time is filtered against ActivityWatch's own
+  idle detection, so "active" means at the keyboard, not a window left open while
+  you were somewhere else.
+
+The first two are why the number can be larger than Batman's. The third is why
+it's ever smaller. `batman-time` asks:
+
+```
+$ batman-time saving-world
+saving-world — 0m active today, last stretch 4h49m elapsed / 56m active, ended Fri 16:09
+
+$ batman-time --all
+  1h47m  side-quest
+    42m  batcave
+```
+
+Elapsed against active is the pair that matters, and neither clock gives you both
+alone. Five hours at the desk producing 56 minutes on the project isn't a long
+session, it's a stuck one — and either number by itself tells you the wrong thing.
+
+**It reads terminal window titles and nothing else.** They're the only ones that
+carry a working directory — `saving-world : claude — Konsole`. Browser, media,
+chat, mail and note-taking titles are dropped before aggregation, not filtered
+after. Your YouTube history and your vault note names are not a productivity
+metric and Batman never fetches them.
+
+In the hook it's a clause on a warning that was already printing, never its own
+line, and it stays quiet unless it knows 30+ minutes more than the day's transcripts
+already do — which, now that those span the day, means genuine work off the
+transcript and nothing else. Silent too when aw-server isn't running: it's
+per-machine, so a synced `~/.claude` doesn't carry the data across boxes.
+
+```
+BATMAN: 92 active minutes on this today, 46 in this session. 160 active minutes
+on project today across all sessions (ActivityWatch). Long runs are where the
+wrong work hides. [...]
+```
 
 ## The new-project ritual
 
@@ -133,21 +195,22 @@ $ /batman-report
 
   BATMAN — last 30 days
 
-  loci                   17h07m  35 sessions   39%  <- ate the week
-  private                13h05m  10 sessions   30%
-  ingram-chat             2h51m   1 session     6%
+  saving-world           17h07m  35 sessions   39%  <- ate the week
+  batcave                13h05m  10 sessions   30%
+  side-quest              2h51m   1 session     6%
 
   stuck signals
-  tarentula: knowledge-compendium.html rewritten 138x in one session
-  loci: custom.scss rewritten 8x in one session
-  loci: same error 7x — "TimeoutError: browserBackend.callTool"
+  side-quest: index.html rewritten 138x in one session
+  saving-world: theme.scss rewritten 8x in one session
+  saving-world: same error 7x — "TimeoutError: browserBackend.callTool"
 
   Ask: was the top line the thing that mattered?
 ```
 
 Read from Claude Code's own session transcripts. Reads only — writes nothing,
-sends nothing, stores nothing. That `custom.scss` line is a real one: hours of
-telling an AI to nudge text it cannot see.
+sends nothing, stores nothing. The numbers are from a real run; only the names
+are changed. That `theme.scss` line is real too: hours of telling an AI to nudge
+text it cannot see.
 
 ## Commands
 
@@ -156,8 +219,14 @@ telling an AI to nudge text it cannot see.
 | `/batman-new` | Does it exist, why build it, write `WHY.md` |
 | `/batman-why` | Write or refresh `WHY.md` on a project that already exists |
 | `/batman-report [days]` | Where the time went, and the stuck signals |
+| `batman-time [project]` | Today's active time and the current stretch, if you run ActivityWatch |
 | `/batman-help` | The card |
 | `batman off` | Stand down for this session |
+
+The plugin's `bin/` is on `PATH` once installed, so `batman-time`, `batman-report`
+and `batman-snooze` are callable by bare name from anywhere. Skills use those names
+rather than `${CLAUDE_PLUGIN_ROOT}/...`, which is expanded in `hooks.json` but is
+empty in the environment tool calls actually run in.
 
 ## Friends
 

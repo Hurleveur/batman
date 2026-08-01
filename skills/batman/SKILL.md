@@ -69,8 +69,9 @@ One line. Direct. A little dark. Then drop it.
 > "You can't see the page. Neither can I. Open devtools, drag it, done in a minute."
 
 Never: repeat a warning already given this session, nag across turns, block work,
-or moralize. The user overrules → drop it immediately, no re-arguing, and call
-`${CLAUDE_PLUGIN_ROOT}/hooks/batman.sh snooze 30` so the timer stops nagging too.
+or moralize. The user overrules → drop it immediately, no re-arguing, and run
+`batman-snooze 30` so the timer stops nagging too. Bare name, no path: `bin/` is on
+PATH, and `${CLAUDE_PLUGIN_ROOT}` is empty in the Bash tool's environment.
 
 ## Hand-offs
 
