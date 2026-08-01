@@ -67,6 +67,12 @@ repeat a warning already given, never nag across turns, never block the work, ne
    the same error twice = stop. No fourth attempt on the same theory. Out loud: new
    hypothesis, timebox, or back out. Sunk cost is not a reason. Deleting the branch is
    a respectable outcome.
+   Stuck has a second shape, on the user's side: they have stopped steering. Briefs
+   that opened long and specific have collapsed into 'ok', 'go on', 'yes'; they are no
+   longer reacting to what you actually did; work is continuing without intention behind
+   it. Name the observation, once, and stop there — 'you opened with a spec and the last
+   few have been one-liners; still the right thread?' Do NOT prescribe a break, a
+   lighter scope, or a stopping point. What they do with the observation is theirs.
 5. DRIFT. Session opened on X, work is now on unrelated Y: 'came here for X, still want
    X?' WHY.md, where present, is the north star — compare against it, not against vibes.
 6. WRONG PROJECT. Run /batman-report when the question is real (a long session, a new
@@ -86,17 +92,33 @@ User overrules -> drop it immediately, no re-arguing, and run: $SELF snooze 30"
 
 This project's north star (WHY.md) — compare the work against it, not against vibes:
 $(head -20 "$CWD/WHY.md")"
-  elif [ -n "$CWD" ] && [ -d "$CWD" ]; then
+  else
+    # No project WHY.md. Fall back to the standing one so signal 5 still has something
+    # to measure drift against — most sessions run somewhere with no WHY.md, and $HOME
+    # is where the aimless ones happen. A project file always wins; this is the floor,
+    # never an override. Slightly longer head: the standing file carries a priority
+    # order and its drift tells below the fold, which is the half that does the work.
+    GLOBAL_WHY="${BATMAN_WHY:-$HOME/.claude/WHY.md}"
+    if [ -f "$GLOBAL_WHY" ]; then
+      CTX="$CTX
+
+No WHY.md here, so the standing north star applies — compare the work against it, not
+against vibes. It is broader than a project's, so use it for the 'is this the right
+thing at all' question, not for line-level scope:
+$(head -30 "$GLOBAL_WHY")"
+    fi
     # New project = no git history AND a near-empty directory. Both, not either:
     # $HOME and other working dirs have no commits but plenty in them, and a
     # nudge that fires every session is a nudge nobody reads.
-    commits=$(git -C "$CWD" rev-list --count HEAD 2>/dev/null || echo 0)
-    files=$(find "$CWD" -maxdepth 1 -mindepth 1 ! -name '.*' 2>/dev/null | wc -l)
-    if [ "$commits" -eq 0 ] && [ "$files" -le 2 ]; then
-      CTX="$CTX
+    if [ -n "$CWD" ] && [ -d "$CWD" ]; then
+      commits=$(git -C "$CWD" rev-list --count HEAD 2>/dev/null || echo 0)
+      files=$(find "$CWD" -maxdepth 1 -mindepth 1 ! -name '.*' 2>/dev/null | wc -l)
+      if [ "$commits" -eq 0 ] && [ "$files" -le 2 ]; then
+        CTX="$CTX
 
 New or empty project, and no WHY.md. Before writing code, use the batman-new skill:
 check whether this already exists, get the real reason out of the user, write WHY.md."
+      fi
     fi
   fi
   emit SessionStart "$CTX"
@@ -135,11 +157,22 @@ FACTS=$(jq -n -r -R '
       | (if (.content | type) == "string" then .content else (.content[0].text? // "") end)
       | gsub("[\\t\\n\"]"; " ") | .[0:60])
      | group_by(.) | map({k: .[0], n: length}) | max_by(.n)) as $err
-  | [ ($active / 60 | floor), ($hot.k // "-"), ($hot.n // 0), ($err.k // "-"), ($err.n // 0) ]
+  # Steering: mean prompt length, first third vs last third. Typed prompts only —
+  # hook injections start "<", the local-command wrapper starts "Caveat:", and both
+  # would swamp the average with text the user never wrote.
+  | ($e | map(select(.type == "user" and (.message.content | type) == "string")
+      | .message.content
+      | select(startswith("<") | not) | select(startswith("Caveat:") | not) | length)) as $L
+  | ($L | length) as $ln
+  | (if $ln >= 8 then ($ln / 3 | floor) else 0 end) as $k
+  | (if $k > 0 then (($L[0:$k] | add) / $k | floor) else 0 end) as $early
+  | (if $k > 0 then (($L[-$k:] | add) / $k | floor) else 0 end) as $late
+  | [ ($active / 60 | floor), ($hot.k // "-"), ($hot.n // 0), ($err.k // "-"), ($err.n // 0),
+      $early, $late ]
   | @tsv' "$TP" 2>/dev/null)
 [ -n "$FACTS" ] || quiet
-IFS=$'\t' read -r ACTIVE HOTF HOTN ERRK ERRN <<<"$FACTS"
-ACTIVE=${ACTIVE:-0}; HOTN=${HOTN:-0}; ERRN=${ERRN:-0}
+IFS=$'\t' read -r ACTIVE HOTF HOTN ERRK ERRN EARLY LATE <<<"$FACTS"
+ACTIVE=${ACTIVE:-0}; HOTN=${HOTN:-0}; ERRN=${ERRN:-0}; EARLY=${EARLY:-0}; LATE=${LATE:-0}
 
 TOKS=$(tail -80 "$TP" 2>/dev/null | jq -r 'select(.type=="assistant") | .message.usage
   | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)' 2>/dev/null \
@@ -170,6 +203,16 @@ if [ "$TOKS" -ge $((FTOK + TOKS_LIMIT)) ]; then
 fi
 [ -n "$STUCK$DRAG" ] || quiet
 echo "$FMIN $FTOK $FHOT $FERR" > "$STATE"
+
+# Steering rides an emission that was already happening — never opens one. A collapse
+# from a long opening brief to one-liners is also just a session converging, so alone it
+# is not evidence; paired with a signal that already tripped it is. Measured over 27 real
+# sessions: <40% fires in 3 of the 15 long ones, about one in five. A separate signal at
+# that rate would be noise; an extra clause on a line already printing is free.
+STEER_LIMIT=$(conf steering 40)
+if [ "$EARLY" -gt 0 ] && [ "$((LATE * 100 / EARLY))" -lt "$STEER_LIMIT" ]; then
+  DRAG="$DRAG Prompts opened ~$EARLY chars, latest third ~$LATE."
+fi
 
 # Churn outranks the clock: it is evidence, the clock is only a prior.
 if [ -n "$STUCK" ]; then

@@ -45,6 +45,13 @@ Sunk cost is not a reason. Deleting the branch is a valid, respectable outcome.
 The prompt hook counts the same thing from the transcript and will hand you the
 number. When it does, it isn't a suggestion — answer it in one line, then work.
 
+Stuck has a second shape, on the user's side: they have stopped steering. Briefs
+that opened long and specific have collapsed into "ok", "go on", "yes"; they are
+no longer reacting to what you actually did; the work continues without intention
+behind it. Name the observation, once, and stop there — "you opened with a spec
+and the last few have been one-liners; still the right thread?" Do NOT prescribe a
+break, a lighter scope, or a stopping point. What they do with it is theirs.
+
 **5. Drift.** The session opened on X, work is now on unrelated Y. Say it once:
 "came here for X. still want X?" If `WHY.md` exists in the project, that's the
 north star — compare against it, not against vibes.

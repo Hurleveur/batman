@@ -30,8 +30,8 @@ saved you. He isn't the hero we deserve, he's the one we need.
 | **It already exists** | You're rebuilding a library. Searched GitHub, your own repos, installed deps, before line one. |
 | **Nobody asked** | A feature with no requester and nothing that breaks without it. |
 | **Wrong hands** | Jobs AI does badly — visual/text fitting, images, testing with no browser, anything tuned by feel. Flagged *before* attempt one, with the escape route. |
-| **Stuck too long** | Three failed attempts on one theory, or a file rewritten nine times. No fourth attempt. New hypothesis, timebox, or back out. |
-| **Drift** | Session opened on X, work is on Y. Checked against `WHY.md`, not vibes. |
+| **Stuck too long** | Three failed attempts on one theory, or a file rewritten nine times. No fourth attempt. New hypothesis, timebox, or back out. Also its other shape: *you* stopped steering — long briefs collapsed into "ok", "go on". Named as an observation, never a prescription. |
+| **Drift** | Session opened on X, work is on Y. Checked against `WHY.md`, not vibes — the project's, or your standing one. |
 | **Wrong project** | Time going somewhere you never said mattered. `/batman-report` shows where the week actually went. |
 
 Silent by default. When something trips, one line, once, then out of the way.
@@ -43,10 +43,13 @@ Two hooks, both cheap bash. No daemon, no telemetry, no database.
 
 **On session start** — the six signals go in, in full. Not a banner announcing a
 mode: the actual rules, because a skill file nobody loads changes nothing. If the
-project has a `WHY.md`, it goes in as the north star. If the directory is empty
-*and* has no commits, he points at the new-project ritual before you write code —
-a lived-in scratch dir like `$HOME` has no commits either, and a nudge that fires
-every session is a nudge nobody reads.
+project has a `WHY.md`, it goes in as the north star. If it doesn't, `~/.claude/WHY.md`
+does — your standing one, for the "is this the right thing at all" question. Most
+sessions run somewhere with no `WHY.md`, and `$HOME`, where there's no project to
+drift *from*, is where the aimless ones happen. A project file always wins. If the
+directory is empty *and* has no commits, he points at the new-project ritual before
+you write code — a lived-in scratch dir like `$HOME` has no commits either, and a
+nudge that fires every session is a nudge nobody reads.
 
 **On every prompt** — one pass over the session transcript: the same file rewritten
 over and over, the same error hit again and again, active minutes (gaps capped at
@@ -56,13 +59,20 @@ thresholds: silence, nothing added. Over them, *once*, he names the number —
 the exit. Facts, not a request to introspect. Asking an agent whether it's stuck
 gets you a confident no; showing it the count doesn't.
 
+The same pass measures your own steering — mean prompt length, first third against
+last. A collapse rides along on a warning that was already printing; it never opens
+one, because a session converging from a long brief to short confirmations is also
+just a session finishing well. Paired with a signal that already tripped, it's the
+difference between converging and coasting.
+
 The interesting moment is mid-session, not at the end. By the time a session
 closes, the hours are already gone.
 
 ```jsonc
 // ~/.claude/batman.json — optional, these are the defaults
 { "minutes": 60, "tokens": 200000,    // 0 disables either
-  "rewrites": 8, "errors": 3 }        // churn + repeated-error thresholds
+  "rewrites": 8, "errors": 3,         // churn + repeated-error thresholds
+  "steering": 40 }                    // % of opening prompt length that reads as coasting
 ```
 
 Fires once per threshold crossed, then re-arms at the next multiple. Wave him
