@@ -20,10 +20,13 @@ scan() {
     | (if $n < 2 then 0 else
         [range(1; $n)] | map(($t[.] - $t[.-1]) | if . > 300 then 300 else . end) | add
       end) as $active
+    # sort_by, not max_by: a session can churn two files (a script and its
+    # template, say), and max_by silently drops every file but the loudest one.
     | ($e | map(select(.type == "assistant") | .message.content[]?
         | select(.type == "tool_use" and (.name | test("^(Edit|Write|NotebookEdit)$")))
         | .input.file_path // empty)
-       | group_by(.) | map({k: .[0], n: length}) | max_by(.n)) as $hot
+       | group_by(.) | map({k: .[0], n: length}) | sort_by(-.n)) as $hots
+    | ($hots[0]) as $hot | ($hots[1]) as $hot2
     | ($e | map(select(.type == "user") | .message.content[]?
         | select(type == "object" and .type == "tool_result" and .is_error == true)
         | (if (.content | type) == "string" then .content else (.content[0].text? // "") end)
@@ -33,6 +36,7 @@ scan() {
         ($active | floor),
         ($e | map(select(.type == "user" and (.message.content | type) == "string")) | length),
         ($hot.k // "-"), ($hot.n // 0),
+        ($hot2.k // "-"), ($hot2.n // 0),
         ($err.k // "-"), ($err.n // 0),
         ($t | first // 0 | strftime("%Y-%m-%d")) ]
     | @tsv' "$1" 2>/dev/null || true
@@ -64,18 +68,28 @@ echo "$DATA" | awk -F'\t' '
     }
   }'
 
-# Loudest signals only — a wall of warnings is the same as no warning.
+# Loudest signals, not just the loudest one — a wall of warnings is the same as no
+# warning, but a five-line cap on a week that had four separate multi-hour grinds
+# hides three of them behind "...and N more." Columns shifted by the second hot file:
+# cwd active prompts hot1_k hot1_n hot2_k hot2_n err_k err_n date.
 ALL=$(echo "$DATA" | awk -F'\t' '
   { n = split($1, p, "/"); proj = p[n] ? p[n] : $1 }
-  $5 >= 5 { m = split($4, q, "/"); printf "%d\t  %s: %s rewritten %dx in one session (%s)\n", $5, proj, q[m], $5, $8 }
-  $7 >= 3 { printf "%d\t  %s: same error %dx — \"%s\" (%s)\n", $7, proj, $7, $6, $8 }
-  $2 >= 7200 && $3 <= 3 { printf "%d\t  %s: %dh session, %d prompt(s) — long grind, little steering (%s)\n", 5, proj, $2/3600, $3, $8 }' \
+  $5 >= 5 { m = split($4, q, "/"); printf "%d\t  %s: %s rewritten %dx in one session (%s)\n", $5, proj, q[m], $5, $10 }
+  $7 >= 5 { m = split($6, q, "/"); printf "%d\t  %s: %s rewritten %dx in one session (%s)\n", $7, proj, q[m], $7, $10 }
+  $9 >= 3 { printf "%d\t  %s: same error %dx — \"%s\" (%s)\n", $9, proj, $9, $8, $10 }
+  $2 >= 7200 && $3 <= 3 { printf "%d\t  %s: %dh session, %d prompt(s) — long grind, little steering (%s)\n", 5, proj, $2/3600, $3, $10 }' \
   | sort -rn)
 
+# Capped per project, not flat: a bad week for one project used to crowd the other
+# 18 signals off the page entirely. Three per project covers a churn signal plus an
+# error plus a second churny file — the actual shape of a real grind — while the
+# rest still collapse to a count so the list stays a page, not a wall.
 if [ -n "$ALL" ]; then
+  SHOWN=$(echo "$ALL" | cut -f2- | awk -F': ' '{c[$1]++; if (c[$1] <= 3) print}')
   N=$(wc -l <<<"$ALL")
-  printf '\n  stuck signals\n%s\n' "$(head -5 <<<"$ALL" | cut -f2-)"
-  [ "$N" -gt 5 ] && printf '  ... and %d more. Same story.\n' "$((N - 5))"
+  S=$(wc -l <<<"$SHOWN")
+  printf '\n  stuck signals\n%s\n' "$SHOWN"
+  [ "$N" -gt "$S" ] && printf '  ... and %d more, same projects, same story.\n' "$((N - S))"
 fi
 
 printf '\n  Ask: was the top line the thing that mattered?\n\n'

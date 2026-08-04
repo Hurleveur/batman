@@ -25,13 +25,46 @@ mk() { # mk <dir> <cwd> <start_epoch> [basename]
 }
 # Today, deliberately: the hook's clock counts from midnight, so a fixture dated
 # yesterday would make every clock assertion below pass by reading zero.
-mk proj-a /home/u/proj-a "$(date +%s)"
+T0=$(date +%s)
+mk proj-a /home/u/proj-a "$T0"
 
 OUT=$(bash scripts/report.sh 7 "$TMP/projects")
 has "$OUT" "proj-a"            "report finds the project"
 has "$OUT" "0h38m"             "active time counted (19 gaps x 120s, capped)"
 has "$OUT" "hot.ts rewritten"  "churn signal fires"
 has "$OUT" "same error"        "repeated-error signal fires"
+
+# churn <transcript_file> <cwd> <file_path> <start_epoch> <count> — a lighter fixture
+# than mk(): just enough Edit events to make one file the session's Nth-hottest.
+churn() {
+  local f=$1 cwd=$2 fp=$3 t=$4 n=$5
+  for i in $(seq 0 $((n - 1))); do
+    ts=$(date -u -d "@$((t + i * 60))" +%Y-%m-%dT%H:%M:%S.000Z)
+    printf '{"type":"assistant","cwd":"%s","timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"%s"}}]}}\n' \
+      "$cwd" "$ts" "$fp" >> "$f"
+  done
+  printf '{"type":"ai-title","aiTitle":"%s"}\n' "$(head -c 900 /dev/zero | tr '\0' 'x')" >> "$f"
+}
+
+# --- a second churny file in the same session must also surface: max_by used to
+# keep only the single loudest file and silently drop every sibling ---------------
+churn "$TMP/projects/proj-a/s.jsonl" /home/u/proj-a /p/warm.ts "$T0" 6
+OUT=$(bash scripts/report.sh 7 "$TMP/projects")
+has "$OUT" "hot.ts rewritten 20x"  "the loudest hot file in a session still fires"
+has "$OUT" "warm.ts rewritten 6x"  "a second hot file in the same session also fires"
+
+# --- the stuck-signal cap is per project, not a flat 5 across the whole report:
+# a bad week for proj-a must not crowd a different project's signal off the page --
+churn "$TMP/projects/proj-a/s2.jsonl" /home/u/proj-a /p/third.ts "$T0" 8
+mkdir -p "$TMP/projects/proj-w"
+churn "$TMP/projects/proj-w/s.jsonl" /home/u/proj-w /p/distinct.ts "$T0" 6
+OUT=$(bash scripts/report.sh 7 "$TMP/projects")
+has "$OUT" "third.ts rewritten"     "proj-a's 2nd-loudest signal still shown"
+has "$OUT" "distinct.ts rewritten"  "a different project's signal is never crowded out"
+echo "$OUT" | grep -q "warm.ts rewritten" \
+  && no "proj-a's 3rd signal printed by name instead of collapsing into the count" \
+  || ok "proj-a's 3rd signal collapses into the overflow count, not a dropped line"
+has "$OUT" "and 1 more, same projects, same story." "overflow count matches the one suppressed line"
 
 OUT=$(bash scripts/report.sh 7 "$TMP/nope" 2>&1); [ $? -ne 0 ] || true
 has "$OUT" "no transcripts"    "missing dir handled"
