@@ -36,6 +36,15 @@ has "$OUT" "same error"        "repeated-error signal fires"
 OUT=$(bash scripts/report.sh 7 "$TMP/nope" 2>&1); [ $? -ne 0 ] || true
 has "$OUT" "no transcripts"    "missing dir handled"
 
+# A readable root whose subdirs aren't: find exits non-zero, and set -e used to kill
+# the report with no output at all. Also the singular, now that /batman-report 1 is
+# the documented evening run.
+mkdir -p "$TMP/locked/inner"; : > "$TMP/locked/inner/x.jsonl"; chmod 000 "$TMP/locked/inner"
+OUT=$(bash scripts/report.sh 1 "$TMP/locked" 2>&1); RC=$?
+chmod 755 "$TMP/locked/inner"
+has "$OUT" "nothing in the last 1 day." "unreadable subdir still reports, in the singular"
+[ "$RC" -eq 0 ] && ok "empty result exits 0" || no "empty result exited $RC"
+
 # --- hooks ------------------------------------------------------------------
 # Points at nothing by default, so the standing-WHY fallback stays out of every other
 # test — otherwise these would read the real ~/.claude/WHY.md and pass or fail on it.

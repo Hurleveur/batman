@@ -38,12 +38,14 @@ scan() {
     | @tsv' "$1" 2>/dev/null || true
 }
 
+# `|| true`: find exits non-zero on an unreadable subdir, and with set -e + pipefail
+# that killed the whole report silently — exit 1, not one line of output.
 DATA=$(find "$ROOT" -name '*.jsonl' -mtime "-$DAYS" -size +1k 2>/dev/null \
-  | while read -r f; do scan "$f"; done)
+  | while read -r f; do scan "$f"; done || true)
 
-[ -n "$DATA" ] || { echo "batman: nothing in the last $DAYS days."; exit 0; }
+[ -n "$DATA" ] || { echo "batman: nothing in the last $DAYS day$([ "$DAYS" = 1 ] || echo 's')."; exit 0; }
 
-printf '\n  BATMAN — last %s days\n\n' "$DAYS"
+printf '\n  BATMAN — last %s day%s\n\n' "$DAYS" "$([ "$DAYS" = 1 ] && echo '' || echo 's')"
 
 echo "$DATA" | awk -F'\t' '
   { n = split($1, p, "/"); proj = p[n] ? p[n] : $1
