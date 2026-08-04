@@ -9,7 +9,6 @@
       "name": "batman",
       "source": "./",
       "description": "The watchman for your time. Catches the wrong project, the feature nobody asked for, the two-hour bug, and the job AI can't do.",
-      "version": "0.5.0",
       "category": "productivity"
     }
   ]
