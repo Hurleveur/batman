@@ -32,7 +32,7 @@ saved you. He isn't the hero we deserve, he's the one we need.
 | **Wrong hands** | Jobs AI does badly — visual/text fitting, images, testing with no browser, anything tuned by feel. Flagged *before* attempt one, with the escape route. |
 | **Stuck too long** | Three failed attempts on one theory, or a file rewritten nine times. No fourth attempt. New hypothesis, timebox, or back out. Also its other shape: *you* stopped steering — long briefs collapsed into "ok", "go on". Named as an observation, never a prescription. |
 | **Drift** | Session opened on X, work is on Y. Checked against `WHY.md`, not vibes — the project's, or your standing one. |
-| **Wrong project** | Time going somewhere you never said mattered. `/batman-report` shows where the week actually went. |
+| **Wrong project** | Time going somewhere you never said mattered. `/batman-report` shows where the week actually went, `/batman-plan` names where the day should go. |
 
 Silent by default. When something trips, one line, once, then out of the way.
 Overrule him and he drops it — and snoozes his own timer so he doesn't nag.
@@ -180,18 +180,53 @@ Write it that way:
   against "book the dentist" is noise. A list pasted in here is stale in a week,
   and this file goes into every session that lacks a project `WHY.md`.
 - **Drift tells, in your own words.** What your wrong turn actually looks like.
+- **Say how you want the planning done**, if the defaults aren't yours. Which
+  repos to check on GitHub, whether to look at ActivityWatch, what order to read
+  the lists in. `/batman-plan` follows what this file says over its own
+  defaults, and that's the only per-user knob it has.
 - **Under 30 lines.** That's what gets read.
 
-Nothing follows those links automatically — Batman points, you look. A hook that
-pulls today's open items in at session start is maybe fifteen lines, and it isn't
-here because nobody has needed it enough to say so. If that's you, open an issue.
+Nothing follows those links during a normal session — Batman points, you look.
+The one thing that does follow them is `/batman-plan`, and only when you run it.
+No hook reads your todo list at session start, by design: the links are there so
+*you* can be pointed at them, not so every session drags your errands in.
 
 Override the path with `$BATMAN_WHY`. A project's own `WHY.md` always wins.
+
+## What today should hold
+
+`/batman-report` looks backward. `/batman-plan` faces the other way, and it's the
+only part of Batman that follows the links in your `WHY.md` instead of pointing
+at them: the todo file, the kanban, your GitHub issues and PRs, the branches you
+left dirty, and where the hours have actually been going.
+
+Days *ahead*, default 1. `/batman-plan 7` plans the week, and looks back a week
+to do it — planning seven days off yesterday's hours is guessing.
+
+```
+$ /batman-plan
+
+  WHY.md, in order: saving-world, then batcave. Explicitly not: the plumbing.
+
+  open loop    batcave — 3 uncommitted files, branch 2 ahead. Thursday's work
+               never landed.
+  lists        saving-world — "finish the import path", top of todo.md
+               3 issues assigned to you, 1 PR of yours waiting on review
+  last 3 days  side-quest 4h12m · saving-world 40m
+
+  Two days on the thing your own WHY.md calls "not the work", forty minutes on
+  first place. Land batcave's branch first — ten minutes — then the import path?
+```
+
+That's the murky morning. On a clear one it's two lines and a question, because
+padding an obvious answer into a briefing is its own kind of wasted time. It
+writes nothing, and it never runs on its own — a tool that tells you what to do
+before you ask is one you learn to scroll past.
 
 ## Where the week went
 
 ```
-$ /batman-report
+$ /batman-report 30
 
   BATMAN — last 30 days
 
@@ -207,10 +242,46 @@ $ /batman-report
   Ask: was the top line the thing that mattered?
 ```
 
-Read from Claude Code's own session transcripts. Reads only — writes nothing,
-sends nothing, stores nothing. The numbers are from a real run; only the names
-are changed. That `theme.scss` line is real too: hours of telling an AI to nudge
-text it cannot see.
+Days back, default 7 — bare `/batman-report` is the week, `/batman-report 1` the
+day just spent. Read from Claude Code's own session transcripts. Reads only —
+writes nothing, sends nothing, stores nothing. The numbers are from a real run;
+only the names are changed. That `theme.scss` line is real too: hours of telling
+an AI to nudge text it cannot see.
+
+## A week with Batman
+
+Both commands take a horizon: `/batman-plan [days ahead]`, default 1, and
+`/batman-report [days back]`, default 7. The pair is the week.
+
+**Monday — `/batman-plan 7`.** The shape, not a schedule: which projects get
+which days, what has to land before the rest can start, and what's getting
+dropped. It says the dropped part out loud, because a week that fits everything
+was never true.
+
+**Every other morning — `/batman-plan`.** One day ahead. It reads your `WHY.md`,
+pulls the lists and the loops you left open yesterday, and names the one thing.
+Costs a minute. The alternative is opening whatever tab was already there, which
+is how a week goes to the third-priority project.
+
+**All day — silence.** The hooks watch the session and say nothing until a
+threshold trips: an hour in, a file rewritten eight times, the same error three
+times, your own briefs collapsing into "ok, go on". Then one line, once. Wave it
+off and it snoozes itself for thirty minutes.
+
+**Any day something new comes up — `/batman-new`.** Before the first file. Does
+it exist, why does it exist, `WHY.md`. Ten minutes that regularly saves a
+weekend.
+
+**Evening — `/batman-report 1`.** Optional, and honest. Where the day actually
+went versus where you said it would at breakfast. The gap is the lesson; there's
+nothing to do about it tonight.
+
+**Friday — `/batman-report 7`.** The one that matters. One project ate the week
+— was it the one on top of your `WHY.md`? Do this in a retro, or before writing
+next week's plan, and Monday's `/batman-plan` starts from something real.
+
+Skip the evening one if it becomes a ritual you stop reading. The morning and the
+Friday are the pair that does the work.
 
 ## Commands
 
@@ -218,7 +289,8 @@ text it cannot see.
 |---|---|
 | `/batman-new` | Does it exist, why build it, write `WHY.md` |
 | `/batman-why` | Write or refresh `WHY.md` on a project that already exists |
-| `/batman-report [days]` | Where the time went, and the stuck signals |
+| `/batman-plan [days]` | What to work on next — `WHY.md`, its lists, open loops, recent hours. Days *ahead*, default 1 |
+| `/batman-report [days]` | Where the time went, and the stuck signals. Days *back*, default 7 |
 | `batman-time [project]` | Today's active time and the current stretch, if you run ActivityWatch |
 | `/batman-help` | The card |
 | `batman off` | Stand down for this session |

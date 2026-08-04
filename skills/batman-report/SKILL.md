@@ -8,8 +8,12 @@ description: Show where time actually went across projects, from Claude Code ses
 Run it:
 
 ```bash
-batman-report 7    # days, default 7
+batman-report 7    # days back, default 7 — one week
 ```
+
+`/batman-report 1` is the evening version, the day just spent. Whatever the user
+asks for in words is the argument: "yesterday" is 1, "this month" is 30. It
+mirrors `/batman-plan [days ahead]`, which faces the other way.
 
 Bare name, no path: the plugin's `bin/` is on PATH. Do not spell it
 `${CLAUDE_PLUGIN_ROOT}/scripts/report.sh` — that variable is empty in the Bash

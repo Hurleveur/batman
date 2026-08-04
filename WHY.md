@@ -8,8 +8,9 @@ can't see). Nothing in the tooling notices.
 **For:** Me first, then anyone who has lost a weekend the same way.
 
 **Done looks like:** An always-on skill that stays silent, plus two cheap hooks
-that ask one rude question when a session runs long — and a report that shows
-where the week actually went.
+that ask one rude question when a session runs long — a report that shows where
+the week actually went, and, facing the other way, a plan that reads WHY.md and
+the lists it links to answer what the day should hold.
 
 **Already exists:** [scope-guard](https://github.com/atoolz/scope-guard) catches
 the *agent* editing files outside the prompt. ponytail cuts code size. grill-me
