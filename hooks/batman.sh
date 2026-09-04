@@ -2,6 +2,7 @@
 # Batman hooks. Cheap, quiet, and never in the way.
 #   session-start  <- SessionStart : the rules, WHY.md, new-project nudge
 #   check          <- UserPromptSubmit : churn, repeated errors, active time, context size
+#   pretooluse     <- PreToolUse(Bash) : catches `git init` at the moment it fires
 #   snooze [min]   <- called by the skill when you overrule Batman
 # Fails silent on purpose: a watchman that breaks your session is worse than none.
 set -uo pipefail
@@ -41,6 +42,25 @@ CWD=$(jq -r '.cwd // ""' <<<"$IN" 2>/dev/null)
 SID=$(jq -r '.session_id // "x"' <<<"$IN" 2>/dev/null)
 TP=$(jq -r '.transcript_path // ""' <<<"$IN" 2>/dev/null)
 STATE="$STATE_DIR/$SID.state"
+
+# Signal 1, at the moment it matters instead of buried in the session-start banner.
+# `git init` is the one unambiguous "starting a new project" signal a hook can see —
+# a new file write is not (could be a test, a module in an existing project, anything).
+# `ask` over `deny`: no attempt to detect whether a search already happened this
+# session, that is a heuristic that will be wrong often enough to get snoozed and
+# ignored. A search is always cheap to run right now, so just ask every time.
+if [ "$MODE" = pretooluse ]; then
+  CMD=$(jq -r '.tool_input.command // ""' <<<"$IN" 2>/dev/null)
+  # Anchored on each segment's start, not a bare substring search — otherwise
+  # `echo "run git init later"` trips it too.
+  if echo "$CMD" | tr ';|' '\n' | sed -E 's/&&|\|\|/\n/g' \
+      | grep -qE '^[[:space:]]*git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+init([[:space:]]|$)'; then
+    REASON="BATMAN: new git repo. Search first — GitHub, your own repos, installed deps, existing skills. State USE IT / FORK IT / BUILD IT, then continue. User overrules -> $SELF snooze 30"
+    jq -n --arg r "$REASON" \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse", permissionDecision:"ask", permissionDecisionReason:$r}}'
+  fi
+  exit 0
+fi
 
 if [ "$MODE" = session-start ]; then
   # The rules ship here, in full. A banner that only names the mode changes
@@ -221,10 +241,12 @@ if [ "$ERRN" -ge $((FERR + ERR_LIMIT)) ]; then
 fi
 if [ "$ACTIVE_ALL" -ge $((FMIN + MINS_LIMIT)) ]; then
   FMIN=$(( ACTIVE_ALL / MINS_LIMIT * MINS_LIMIT ))
-  # Name both numbers when they differ: "23 this session" is the one that feels true,
-  # and it is the one that has been hiding the day.
+  # Name both numbers when they differ, session first: "23 this session" is the one
+  # that feels true, the day total is the one that has been hiding behind it. Leading
+  # with the day total instead reads as "you've been at this 101 minutes" when the
+  # session itself just started — misleads at a glance.
   if [ "$SIBS" -gt 0 ]; then
-    DRAG=" $ACTIVE_ALL active minutes on this today, $ACTIVE in this session."
+    DRAG=" $ACTIVE active minutes in this session, $ACTIVE_ALL today."
   else
     DRAG=" $ACTIVE active minutes."
   fi
