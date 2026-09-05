@@ -61,6 +61,10 @@ the defaults. The defaults are for a `WHY.md` that says nothing about planning.
   tool's environment.
 - **`batman-time --all`** only if `WHY.md` asks for it. ActivityWatch is
   per-machine and optional.
+- **A week or more, either direction** (not a single day): add `batman-time` for
+  desk hours transcripts miss, `/check-in` for hypercampus, and flag a stale
+  kanban as wanting `/aggregate` first. A single day skips all three — the
+  lists, open loops, `batman-report 3` are enough.
 
 ## 3. Say it — length follows the situation
 
