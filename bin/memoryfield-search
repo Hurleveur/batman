@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""memoryfield search — semantic recall over the memoryfield index.
+
+Embeds the query with the same Ollama-compatible API the indexer used
+($OLLAMA_URL, model nomic-embed-text), ranks every note in the SQLite cache by
+cosine similarity against it, and prints one line per hit, best first:
+
+    <score> <path>
+
+Usage: memoryfield-search <query> [top-n]
+"""
+import json
+import os
+import sqlite3
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "scripts"))
+from memoryfield_common import cosine, embed, index_path  # noqa: E402
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("usage: memoryfield-search <query> [top-n]", file=sys.stderr)
+        return 1
+    query = sys.argv[1]
+    top_n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+
+    path = index_path()
+    if not os.path.exists(path):
+        print(f"memoryfield: no index at {path} — run memoryfield-index first", file=sys.stderr)
+        return 1
+
+    db = sqlite3.connect(path)
+    rows = db.execute("SELECT path, embedding FROM notes").fetchall()
+    db.close()
+
+    qvec = embed(query)
+    scored = sorted(
+        ((cosine(qvec, json.loads(emb)), p) for p, emb in rows),
+        key=lambda t: t[0],
+        reverse=True,
+    )
+    for score, p in scored[:top_n]:
+        print(f"{score:.4f} {p}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

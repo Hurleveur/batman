@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""memoryfield indexer — one SQLite cache over every project's memory notes.
+
+Walks <memory-root>/*/memory/*.md (skipping each project's MEMORY.md, which is a
+hand-maintained pointer file, not a note), embeds each note's frontmatter
+description plus its body via the Ollama-compatible API at $OLLAMA_URL (default
+http://127.0.0.1:11434, model nomic-embed-text), and stores path, project, name,
+description, mtime and embedding in one file.
+
+The Markdown is the truth and the index is a disposable cache of it, so a rebuild
+is always the whole job, never an incremental merge — this is the single
+documented command for it:
+
+    memoryfield-index ~/.claude/projects
+
+The cache lives at $XDG_CACHE_HOME/memoryfield/index.sqlite3 (~/.cache/memoryfield
+by default) and nowhere under ~/.claude: that tree is synced by Syncthing, which has
+already swapped a live SQLite file out from under a running process here, after
+which every write landed in a deleted inode while the process reported success.
+
+Usage: memoryfield-index <memory-root>
+"""
+import glob
+import json
+import os
+import sqlite3
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "scripts"))
+from memoryfield_common import embed, index_path, parse_frontmatter  # noqa: E402
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("usage: memoryfield-index <memory-root>", file=sys.stderr)
+        return 1
+    root = os.path.expanduser(sys.argv[1])
+
+    path = index_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.remove(path)
+    db = sqlite3.connect(path)
+    db.execute(
+        """CREATE TABLE notes (
+            path TEXT PRIMARY KEY,
+            project TEXT,
+            name TEXT,
+            description TEXT,
+            mtime REAL,
+            embedding TEXT
+        )"""
+    )
+
+    count = 0
+    for note_path in sorted(glob.glob(os.path.join(root, "*", "memory", "*.md"))):
+        if os.path.basename(note_path) == "MEMORY.md":
+            continue
+        project = os.path.basename(os.path.dirname(os.path.dirname(note_path)))
+        with open(note_path, encoding="utf-8") as f:
+            text = f.read()
+        name, description, body = parse_frontmatter(text)
+        name = name or os.path.splitext(os.path.basename(note_path))[0]
+        description = description or ""
+        vector = embed((description + "\n\n" + body).strip())
+        db.execute(
+            "INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?)",
+            (note_path, project, name, description, os.path.getmtime(note_path), json.dumps(vector)),
+        )
+        count += 1
+
+    db.commit()
+    db.close()
+    print(f"memoryfield: indexed {count} notes into {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
