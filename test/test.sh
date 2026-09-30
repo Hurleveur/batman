@@ -126,7 +126,7 @@ mk proj-x /home/u/proj-x "$(date +%s)" b
 TPX="$TMP/projects/proj-x/a.jsonl"
 OUT=$(jq -n --arg tp "$TPX" '{session_id:"t-x1", cwd:"/home/u/proj-x", transcript_path:$tp}' \
   | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "76 active minutes on this today, 38 in this session" \
+has "$OUT" "38 active minutes in this session, 76 today" \
   "the clock counts today's other sessions, not just this one"
 
 # One transcript alone keeps the original wording — nothing to disambiguate.
@@ -154,7 +154,7 @@ case "$OUT" in *"76 active"*) no "yesterday's session is not summed into today";
 OUT=$(jq -n --arg tp "$TMP/projects/proj-y/old.jsonl" \
     '{session_id:"t-y2", cwd:"/home/u/proj-y", transcript_path:$tp}' \
   | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "0 in this session" "an overnight session contributes only its today half"
+has "$OUT" "0 active minutes in this session, 38 today" "an overnight session contributes only its today half"
 echo '{"minutes":60,"tokens":200000}' > "$BATMAN_CONF"
 
 # --- bare-name entry points -------------------------------------------------
