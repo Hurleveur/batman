@@ -31,7 +31,8 @@ import urllib.request
 
 HOST = "http://localhost:5600/api/0"
 # Terminals only. Adding a GUI editor here also starts exposing its window titles.
-WORK_APPS = {"konsole", "kitty", "alacritty", "Alacritty", "ghostty", "org.gnome.Terminal"}
+# Wayland watchers (aw-awatcher) report the app id, so Konsole is "org.kde.konsole" there.
+WORK_APPS = {"konsole", "org.kde.konsole", "kitty", "alacritty", "Alacritty", "ghostty", "org.gnome.Terminal"}
 GAP = dt.timedelta(minutes=30)  # no terminal focus for this long = the stretch ended
 LOOKBACK = dt.timedelta(hours=24)
 HOOK_MARGIN = 30  # minutes AW must exceed the transcript by before it is worth a word
@@ -182,6 +183,9 @@ def selftest():
     # AFK clipping: 60min of focus, only 20min of it awake.
     got = work_spans([ev("konsole", "batcave : claude — Konsole", 0, 60)], [(t(10), t(30))])
     assert got == {"batcave": [(t(10), t(30))]}, got
+
+    # Wayland app id for Konsole counts as a terminal too.
+    assert work_spans([ev("org.kde.konsole", "batcave : claude — Konsole", 0, 60)], [(t(0), t(60))]) == {"batcave": [(t(0), t(60))]}
 
     # Non-terminal apps contribute nothing, whatever their title says.
     assert work_spans([ev("Brave-browser", "secret — Brave", 0, 60)], [(t(0), t(60))]) == {}
