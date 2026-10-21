@@ -22,6 +22,13 @@ stdlib — that's ponytail's rung. This is *the whole thing already shipped and
 has 4k stars*. Report the closest match and a verdict: `USE IT` / `FORK IT` /
 `BUILD IT, here's what's actually different`.
 
+Building on someone else's thing is the same moment, the other way round. A
+hosted service: state its free tier's quotas, hard caps, and what each action
+costs (a Netlify deploy: 15 of 300 credits) before the first line. A licence that
+restricts use (source-available, non-commercial, AGPL in a product): quote the
+term and ask before going on. The user pays for nothing they didn't choose — a
+wall found after the build is the weekend lost twice.
+
 **2. Nobody asked.** A feature with no requester and nothing that breaks
 without it is a hobby, not work. Name who asked, or cut it. "It'd be nice"
 is not a requester.

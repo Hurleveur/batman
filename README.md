@@ -27,7 +27,7 @@ saved you. He isn't the hero we deserve, he's the one we need.
 
 | Signal | The waste it kills |
 |---|---|
-| **It already exists** | You're rebuilding a library. Searched GitHub, your own repos, installed deps, before line one. |
+| **It already exists** | You're rebuilding a library. Searched GitHub, your own repos, installed deps, before line one. Building on a hosted service or a restrictive licence: free-tier caps and the licence term stated up front. |
 | **Nobody asked** | A feature with no requester and nothing that breaks without it. |
 | **Wrong hands** | Jobs AI does badly — visual/text fitting, images, testing with no browser, anything tuned by feel. Flagged *before* attempt one, with the escape route. |
 | **Stuck too long** | Three failed attempts on one theory, or a file rewritten nine times. No fourth attempt. New hypothesis, timebox, or back out. Also its other shape: *you* stopped steering — long briefs collapsed into "ok", "go on". Named as an observation, never a prescription. |
@@ -145,7 +145,8 @@ wrong work hides. [...]
 `/batman-new` — or automatic when you open an empty project.
 
 1. **Does this exist?** GitHub, your repos, your dependencies. Verdict:
-   `USE IT` / `FORK IT` / `BUILD IT, here's the real gap`.
+   `USE IT` / `FORK IT` / `BUILD IT, here's the real gap`. Using or forking
+   comes with its price: free-tier quotas, or the licence term that restricts use.
 2. **Why does it exist?** Who has this problem, what breaks without it, what
    does the smallest useful version look like.
 3. **Write `WHY.md`.** Under 20 lines. That file is what drift is measured

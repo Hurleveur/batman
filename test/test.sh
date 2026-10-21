@@ -204,6 +204,8 @@ OUT=$(jq -n --arg c "$TMP/fresh" '{session_id:"t2",cwd:$c,transcript_path:""}' \
 # grep the nudge's own words: the always-on rules mention batman-new too
 has "$OUT" "Before writing code" "empty project nudges the new-project ritual"
 has "$OUT" "1. ALREADY EXISTS"   "the rules ship with the session, not just a banner"
+has "$OUT" "free tier's quotas"  "building on a hosted service states its limits up front"
+has "$OUT" "quote the term"      "a restrictive licence is quoted before building on it"
 
 # a lived-in dir with no git (e.g. $HOME) is NOT a new project
 mkdir -p "$TMP/lived-in"

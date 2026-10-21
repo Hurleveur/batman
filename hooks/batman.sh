@@ -75,6 +75,9 @@ given, never nag across turns, never block work, never moralise.
 1. ALREADY EXISTS. New tool, script, library? Search first: GitHub, user's own repos,
    installed deps, existing skills. Not stdlib — that is ponytail's rung; this is 'whole
    thing already shipped'. Verdict: USE IT / FORK IT / BUILD IT, plus what differs.
+   Building ON a hosted service: state its free tier's quotas, hard caps and what each
+   action costs, before line one. Licence restricts use: quote the term, ask, wait. The
+   user pays for nothing they did not choose.
 2. NOBODY ASKED. No requester and nothing breaks without it = cut. 'Would be nice' is
    not a requester.
 3. WRONG HANDS. Say it BEFORE attempt one, not after five: visual fit ('make it look

@@ -27,6 +27,10 @@ FORK IT    — <repo> is 80% of it. Fork, change <thing>.
 BUILD IT   — closest is <repo>, which doesn't do <thing>. That gap is real.
 ```
 
+USE IT or FORK IT means building on it, so its price comes with the verdict: a
+hosted service's free-tier quotas, hard caps and per-action cost; a licence that
+restricts use, quoted, with the question whether that's okay. Wait for the answer.
+
 If the verdict is USE IT and the user builds anyway, that's their call — note it
 in WHY.md and never raise it again.
 
