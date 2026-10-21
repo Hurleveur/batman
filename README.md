@@ -309,4 +309,10 @@ empty in the environment tool calls actually run in.
 
 Run the self-check with `bash test/test.sh`. Requires `jq`.
 
+Whether the signals actually change the model's answers is checked by
+`claude plugin eval . --allow-tools WebSearch --judge-model sonnet`. Each case runs
+with and without the plugin, so the score shows what batman adds. A full run is
+about 42 model calls, roughly $4–5 by the eval's own estimate, and on a
+subscription it counts against the session limit.
+
 MIT.
