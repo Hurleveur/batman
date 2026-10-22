@@ -238,6 +238,20 @@ has "$OUT" "north star" "WHY.md becomes the north star"
 case "$OUT" in *"the plumbing is not the work"*) no "standing WHY overrode the project's";;
   *) ok "a project WHY.md wins over the standing one";; esac
 
+# --- git init: denied once per session so Claude reads the reason first -------
+gi() { local d; d=$(jq -n --arg s "$1" --arg c "$2" '{session_id:$s,cwd:"/p",tool_input:{command:$c}}' \
+  | bash hooks/batman.sh pretooluse | jq -r '.hookSpecificOutput.permissionDecision'); echo "${d:-none}"; }
+rm -f "$TMP/state/snooze.until"  # the batman-snooze check above snoozed this state dir
+[ "$(gi g1 'mkdir r && cd r && git init -q')" = deny ] && ok "git init is denied with the reason" \
+  || no "git init was not denied"
+[ "$(gi g1 'git init -q')" = none ] && ok "the retry in the same session goes through" \
+  || no "the retry was stopped again"
+[ "$(gi g2 'echo "git init later"')" = none ] && ok "git init inside a string is not a new repo" \
+  || no "a quoted git init tripped it"
+bash hooks/batman.sh snooze 30
+[ "$(gi g3 'git init')" = none ] && ok "snooze silences the git-init check" \
+  || no "snooze left the git-init check on"
+
 # jq missing / bad input must never break a session
 echo 'not json' | bash hooks/batman.sh check >/dev/null 2>&1 && ok "garbage input exits clean" || no "garbage input broke the hook"
 

@@ -34,6 +34,8 @@ if [ "$MODE" = snooze ]; then
     read -r fmin ftok < "$f" 2>/dev/null || continue
     echo "$((fmin + ${2:-30})) $ftok" > "$f"
   done
+  # The floors above only delay the minutes nudge; the git-init check reads this instead.
+  echo "$(( $(date +%s) + ${2:-30} * 60 ))" > "$STATE_DIR/snooze.until"
   exit 0
 fi
 
@@ -46,18 +48,25 @@ STATE="$STATE_DIR/$SID.state"
 # Signal 1, at the moment it matters instead of buried in the session-start banner.
 # `git init` is the one unambiguous "starting a new project" signal a hook can see —
 # a new file write is not (could be a test, a module in an existing project, anything).
-# `ask` over `deny`: no attempt to detect whether a search already happened this
-# session, that is a heuristic that will be wrong often enough to get snoozed and
-# ignored. A search is always cheap to run right now, so just ask every time.
+# `deny`, once per session: a deny reason is the only one Claude reads before the call
+# runs. `ask` showed this model-facing text to the user as a permission prompt Claude
+# never saw, and forced that prompt even under --dangerously-skip-permissions. The
+# retry goes through, so a scratch repo for a test costs one turn, not a block.
+# No attempt to detect whether a search already happened: that heuristic would be
+# wrong often enough to get snoozed and ignored.
 if [ "$MODE" = pretooluse ]; then
   CMD=$(jq -r '.tool_input.command // ""' <<<"$IN" 2>/dev/null)
+  ONCE="$STATE_DIR/$SID.init"
+  UNTIL=$(cat "$STATE_DIR/snooze.until" 2>/dev/null || echo 0)
+  [ -f "$ONCE" ] || [ "${UNTIL:-0}" -gt "$(date +%s)" ] 2>/dev/null && exit 0
   # Anchored on each segment's start, not a bare substring search — otherwise
   # `echo "run git init later"` trips it too.
   if echo "$CMD" | tr ';|' '\n' | sed -E 's/&&|\|\|/\n/g' \
       | grep -qE '^[[:space:]]*git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+init([[:space:]]|$)'; then
-    REASON="BATMAN: new git repo. Search first — GitHub, your own repos, installed deps, existing skills. State USE IT / FORK IT / BUILD IT, then continue. User overrules -> $SELF snooze 30"
+    : > "$ONCE"
+    REASON="BATMAN: new git repo. Search first — GitHub, your own repos, installed deps, existing skills. State USE IT / FORK IT / BUILD IT in one line, then rerun the same command; it goes through. A scratch repo for a test needs no search: say so and rerun."
     jq -n --arg r "$REASON" \
-      '{hookSpecificOutput:{hookEventName:"PreToolUse", permissionDecision:"ask", permissionDecisionReason:$r}}'
+      '{hookSpecificOutput:{hookEventName:"PreToolUse", permissionDecision:"deny", permissionDecisionReason:$r}}'
   fi
   exit 0
 fi
