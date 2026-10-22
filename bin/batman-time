@@ -18,7 +18,9 @@ Lives in the plugin's bin/, which Claude Code puts on PATH — so it is callable
 name from any session with the plugin installed, no path and no install step.
 
 Exits 0 and stays quiet when aw-server is unreachable. ActivityWatch is per-machine:
-a synced ~/.claude does not bring its data along.
+a synced ~/.claude does not bring its data along. Machines joined by aw-sync are read
+together: each one's buckets carry its hostname, so its terminal time is clipped by its
+own AFK record and a minute seen on two machines counts once.
 """
 
 import datetime as dt
@@ -45,13 +47,29 @@ def _get(path):
 
 
 def fetch(since):
-    """(window events, not-afk spans) since `since`. Buckets found by type, not hostname."""
+    """[(window events, not-afk spans)], one pair per machine, since `since`.
+
+    Buckets are found by type and grouped by the hostname they carry. aw-sync imports
+    another machine's buckets under that machine's hostname, and its window time must
+    be clipped by its own AFK record, never by this one's.
+    """
     now = dt.datetime.now(dt.timezone.utc)
     q = urllib.parse.urlencode({"start": since.isoformat(), "end": now.isoformat(), "limit": -1})
-    ids = {b["type"]: b["id"] for b in _get("buckets/").values()}
-    win = _get(f"buckets/{ids['currentwindow']}/events?{q}")
-    afk = _get(f"buckets/{ids['afkstatus']}/events?{q}")
-    return win, [span(e) for e in afk if e["data"]["status"] == "not-afk"]
+    hosts = pair_buckets(_get("buckets/"))
+    if not hosts:
+        raise KeyError("currentwindow")
+    events = lambda ids: [e for i in ids for e in _get(f"buckets/{i}/events?{q}")]
+    return [(events(win), [span(e) for e in events(afk) if e["data"]["status"] == "not-afk"])
+            for win, afk in hosts]
+
+
+def pair_buckets(buckets):
+    """[(window bucket ids, afk bucket ids)] per hostname that has both."""
+    by_host = {}
+    for b in buckets.values():
+        by_host.setdefault(b.get("hostname"), {}).setdefault(b["type"], []).append(b["id"])
+    return [(t["currentwindow"], t["afkstatus"]) for t in by_host.values()
+            if t.get("currentwindow") and t.get("afkstatus")]
 
 
 def span(e):
@@ -65,9 +83,19 @@ def project(title):
     return head.split(" : ", 1)[0].strip() or None
 
 
-def work_spans(win, awake):
-    """{project: [(start, end)]} for terminal windows, clipped to not-afk time."""
+def work_spans(hosts):
+    """{project: [(start, end)]} for terminal windows, clipped to not-afk time.
+
+    `hosts` is fetch()'s list of (window events, not-afk spans), one per machine.
+    Overlapping spans are merged, so a minute two machines both saw counts once.
+    """
     out = {}
+    for win, awake in hosts:
+        add_spans(out, win, awake)
+    return {name: merge(ss, dt.timedelta(0)) for name, ss in out.items()}
+
+
+def add_spans(out, win, awake):
     for e in win:
         if e["data"]["app"] not in WORK_APPS:
             continue
@@ -80,7 +108,6 @@ def work_spans(win, awake):
             lo, hi = max(a, c), min(b, d)
             if lo < hi:
                 out.setdefault(name, []).append((lo, hi))
-    return out
 
 
 def merge(spans, gap):
@@ -127,7 +154,7 @@ def main(argv):
     since = min(midnight, dt.datetime.now(dt.timezone.utc) - LOOKBACK)
 
     try:
-        win, awake = fetch(since)
+        hosts = fetch(since)
     except (urllib.error.URLError, OSError, KeyError) as err:
         # --hook writes onto a line batman is already printing, so it stays silent here:
         # a diagnostic on stdout would be injected verbatim into the warning.
@@ -135,7 +162,7 @@ def main(argv):
             print(f"activitywatch: no data ({type(err).__name__}) — aw-server is per-machine")
         return 0
 
-    spans = work_spans(win, awake)
+    spans = work_spans(hosts)
     today_mins = lambda n: total([s for s in spans.get(n, []) if s[0] >= midnight]) / 60
 
     if arg == "--hook":
@@ -181,15 +208,34 @@ def selftest():
     assert project("a-hyphenated-name : claude — Konsole") == "a-hyphenated-name"
 
     # AFK clipping: 60min of focus, only 20min of it awake.
-    got = work_spans([ev("konsole", "batcave : claude — Konsole", 0, 60)], [(t(10), t(30))])
+    got = work_spans([([ev("konsole", "batcave : claude — Konsole", 0, 60)], [(t(10), t(30))])])
     assert got == {"batcave": [(t(10), t(30))]}, got
 
     # Wayland app id for Konsole counts as a terminal too.
-    assert work_spans([ev("org.kde.konsole", "batcave : claude — Konsole", 0, 60)], [(t(0), t(60))]) == {"batcave": [(t(0), t(60))]}
+    assert work_spans([([ev("org.kde.konsole", "batcave : claude — Konsole", 0, 60)], [(t(0), t(60))])]) == {"batcave": [(t(0), t(60))]}
 
     # Non-terminal apps contribute nothing, whatever their title says.
-    assert work_spans([ev("Brave-browser", "secret — Brave", 0, 60)], [(t(0), t(60))]) == {}
-    assert work_spans([ev("obsidian", "Private Note - Obsidian", 0, 60)], [(t(0), t(60))]) == {}
+    assert work_spans([([ev("Brave-browser", "secret — Brave", 0, 60)], [(t(0), t(60))])]) == {}
+    assert work_spans([([ev("obsidian", "Private Note - Obsidian", 0, 60)], [(t(0), t(60))])]) == {}
+
+    # Two machines (aw-sync): each clipped by its own AFK, a shared minute counted once.
+    here = ([ev("konsole", "batcave : claude — Konsole", 0, 60)], [(t(0), t(30))])
+    there = ([ev("ghostty", "batcave : claude — Konsole", 20, 60)], [(t(50), t(80))])
+    assert work_spans([here, there]) == {"batcave": [(t(0), t(30)), (t(50), t(80))]}
+    both = ([ev("kitty", "batcave : claude — Konsole", 10, 30)], [(t(0), t(60))])
+    assert work_spans([here, both]) == {"batcave": [(t(0), t(40))]}
+
+    # Buckets pair up by hostname, aw-sync's imports included; a lone bucket pairs with nothing.
+    got = pair_buckets({
+        "aw-watcher-window_a": {"id": "aw-watcher-window_a", "type": "currentwindow", "hostname": "a"},
+        "aw-watcher-afk_a": {"id": "aw-watcher-afk_a", "type": "afkstatus", "hostname": "a"},
+        "aw-watcher-window_b-synced-from-b": {"id": "aw-watcher-window_b-synced-from-b", "type": "currentwindow", "hostname": "b"},
+        "aw-watcher-afk_b-synced-from-b": {"id": "aw-watcher-afk_b-synced-from-b", "type": "afkstatus", "hostname": "b"},
+        "aw-watcher-window_c": {"id": "aw-watcher-window_c", "type": "currentwindow", "hostname": "c"},
+        "aw-stopwatch": {"id": "aw-stopwatch", "type": "general.stopwatch", "hostname": "unknown"},
+    })
+    assert sorted(got) == [(["aw-watcher-window_a"], ["aw-watcher-afk_a"]),
+                           (["aw-watcher-window_b-synced-from-b"], ["aw-watcher-afk_b-synced-from-b"])], got
 
     # A 10min break keeps one stretch; a 40min break splits it.
     assert merge([(t(0), t(20)), (t(30), t(50))], GAP) == [(t(0), t(50))]
