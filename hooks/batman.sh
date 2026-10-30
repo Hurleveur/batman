@@ -215,21 +215,52 @@ ACTIVE=${ACTIVE:-0}; HOTN=${HOTN:-0}; ERRN=${ERRN:-0}; EARLY=${EARLY:-0}; LATE=$
 # split over four sessions reads as four short ones — measured on a real one: 46 minutes
 # in the open session, 92 across the four together. Same project directory, same jq,
 # same midnight cutoff. Churn, errors and steering stay per-session on purpose: those are
-# about this attempt, not the day. ponytail: one jq per sibling, ~0.13s for four. The
-# mtime test only skips files cheaply — a transcript touched today but written yesterday
-# still sums to zero, because the cutoff is applied to the timestamps, not the file.
-SIBS=$(find "$(dirname "$TP")" -name '*.jsonl' -newermt "$(date +%Y-%m-%d)" ! -path "$TP" -print0 2>/dev/null \
-  | while IFS= read -r -d '' f; do
-      jq -n -r -R --argjson mid "${MID:-0}" '[inputs | fromjson?] as $e
-        | ($e | map(.timestamp // empty) | sort
-           | map(sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) as $t
+# about this attempt, not the day. The mtime test only skips files cheaply — a transcript
+# touched today but written yesterday still sums to zero, because the cutoff is applied
+# to the timestamps, not the file.
+# Incremental: re-parsing every sibling on every prompt cost 3.1s of a 4.2s check on a
+# real day (50 transcripts, 238 MB) and timed the hook out at 10s under load. Transcripts
+# only grow, so each file's bytes read, last timestamp and seconds are cached and only the
+# appended tail is parsed. Per host, per day: ~/.claude may sync between boxes, and a
+# file two boxes write is a sync conflict; a new day starts from zero anyway.
+# shortcut: a stat taken mid-append drops that one partial line; minutes barely move.
+SIBS_CACHE="$STATE_DIR/sibs-$(hostname 2>/dev/null || echo host)-$(date +%F).tsv"
+find "$STATE_DIR" -maxdepth 1 -name 'sibs-*.tsv' ! -newermt "$(date +%Y-%m-%d)" -delete 2>/dev/null
+declare -A CB CL CS
+if [ -f "$SIBS_CACHE" ]; then
+  # A bad row is dropped, so that file is parsed whole again, rather than breaking every prompt today.
+  while IFS=$'\t' read -r p b l s; do
+    [[ $b =~ ^[0-9]+$ && $l =~ ^[0-9]+$ && $s =~ ^[0-9]+$ ]] || continue
+    CB[$p]=$b; CL[$p]=$l; CS[$p]=$s
+  done < "$SIBS_CACHE"
+fi
+SIBS_NEW="$SIBS_CACHE.$$"
+SIBS_SECS=0
+: > "$SIBS_NEW"
+while IFS= read -r -d '' f; do
+  size=$(stat -c %s "$f" 2>/dev/null) || continue
+  b=${CB[$f]:-0}; l=${CL[$f]:-0}; s=${CS[$f]:-0}
+  [ "$size" -lt "$b" ] && { b=0; l=0; s=0; }
+  if [ "$size" -gt "$b" ]; then
+    # head caps the read at the stat'd size, so bytes appended meanwhile are read next time, once.
+    read -r ds nl < <(tail -c +$((b + 1)) "$f" | head -c $((size - b)) \
+      | jq -n -r -R --argjson mid "${MID:-0}" --argjson prev "$l" '
+        ([inputs | fromjson? | .timestamp? // empty | strings] | sort
+          | map(sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) as $c
+        | ((if $prev > 0 then [$prev] else [] end) + $c | sort) as $t
         | ($t | length) as $n
         | (if $n < 2 then 0 else
             ([range(1; $n)] | map(select($t[.] >= $mid)
               | ($t[.] - $t[.-1]) | if . > 300 then 300 else . end) | add) // 0
-          end)' "$f" 2>/dev/null
-    done | awk '{s+=$1} END {printf "%d", s/60}')
-SIBS=${SIBS:-0}
+          end) as $secs
+        | "\($secs | floor) \($t[-1] // 0 | floor)"' 2>/dev/null)
+    s=$(( s + ${ds:-0} )); l=${nl:-$l}
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$f" "$size" "$l" "$s" >> "$SIBS_NEW"
+  SIBS_SECS=$(( SIBS_SECS + s ))
+done < <(find "$(dirname "$TP")" -name '*.jsonl' -newermt "$(date +%Y-%m-%d)" ! -path "$TP" -print0 2>/dev/null)
+mv -f "$SIBS_NEW" "$SIBS_CACHE" 2>/dev/null || rm -f "$SIBS_NEW"
+SIBS=$(( SIBS_SECS / 60 ))
 ACTIVE_ALL=$(( ACTIVE + SIBS ))
 
 TOKS=$(tail -80 "$TP" 2>/dev/null | jq -r 'select(.type=="assistant") | .message.usage
