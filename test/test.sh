@@ -118,63 +118,29 @@ OUT=$(jq -n --arg tp "$f" '{session_id:"t5",cwd:"/p",transcript_path:$tp}' \
 has "$OUT" "Prompts opened ~400 chars, latest third ~2" "steering collapse is measured and named"
 echo '{"minutes":60,"tokens":200000}' > "$BATMAN_CONF"
 
-# --- the clock spans today's sessions ---------------------------------------
-# Two transcripts, same project, 38 active minutes each. Per-session the limit is never
-# crossed and Batman says nothing; across the day it is 76 and he should.
+# --- the clock is this session's alone --------------------------------------
+# Two transcripts, same project, 38 active minutes each. Summed across the day they
+# would cross 60; per session neither does, and the day total fired in 370 of 375 real
+# sessions, so the clock stays quiet. Churn and tokens still fire, so the output is there.
 mk proj-x /home/u/proj-x "$(date +%s)" a
 mk proj-x /home/u/proj-x "$(date +%s)" b
-TPX="$TMP/projects/proj-x/a.jsonl"
-OUT=$(jq -n --arg tp "$TPX" '{session_id:"t-x1", cwd:"/home/u/proj-x", transcript_path:$tp}' \
+OUT=$(jq -n --arg tp "$TMP/projects/proj-x/a.jsonl" '{session_id:"t-x1", cwd:"/home/u/proj-x", transcript_path:$tp}' \
   | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "38 active minutes in this session, 76 today" \
-  "the clock counts today's other sessions, not just this one"
-
-# Siblings are cached and only their appended tail is parsed: a live peer that grows by
-# 20 minutes after the first check must add exactly those, the cached part read once.
-ls "$BATMAN_STATE"/sibs-*.tsv >/dev/null 2>&1 && ok "the sibling cache is written" \
-  || no "the sibling cache is written"
-f="$TMP/projects/proj-x/b.jsonl"; t=$(date +%s)
-for i in $(seq 20 29); do
-  ts=$(date -u -d "@$((t + i * 120))" +%Y-%m-%dT%H:%M:%S.000Z)
-  printf '{"type":"user","cwd":"/home/u/proj-x","timestamp":"%s","message":{"role":"user","content":"more"}}\n' "$ts" >> "$f"
-done
-OUT=$(jq -n --arg tp "$TPX" '{session_id:"t-x3", cwd:"/home/u/proj-x", transcript_path:$tp}' \
-  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "38 active minutes in this session, 96 today" \
-  "a grown sibling adds only its new minutes, read from the tail"
-
-# A corrupt cache row is re-parsed from scratch, never a broken hook for the rest of the day.
-sed -i 's/\t[0-9]*$/\tgarbage/' "$BATMAN_STATE"/sibs-*.tsv
-OUT=$(jq -n --arg tp "$TPX" '{session_id:"t-x4", cwd:"/home/u/proj-x", transcript_path:$tp}' \
-  | bash hooks/batman.sh check 2>&1 | jq -r '.hookSpecificOutput.additionalContext' 2>&1)
-has "$OUT" "38 active minutes in this session, 96 today" "a corrupt sibling cache is rebuilt, not fatal"
-
-# One transcript alone keeps the original wording — nothing to disambiguate.
-OUT=$(jq -n --arg tp "$TP" '{session_id:"t-x2", cwd:"/home/u/proj-a", transcript_path:$tp}' \
-  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-grep -q "in this session" <<<"$OUT" && no "a lone session is not dressed up as a day" \
-  || ok "a lone session is not dressed up as a day"
+has "$OUT" "BATMAN:" "another signal still fires, so the clock's silence is visible"
+case "$OUT" in *"active minutes"*) no "other sessions are not summed into the clock";;
+  *) ok "other sessions are not summed into the clock";; esac
 
 # --- yesterday's minutes are not today's ------------------------------------
-# The file filter is mtime, which says "touched today". The sum is timestamps, which
-# say "worked today". Reading the first as the second charged a real morning with the
-# 42 minutes of the previous afternoon, because the session had merely been resumed.
-# `old` is written now, so it passes the mtime filter exactly as a resumed session does.
+# A session opened last night and resumed this morning brings only its today half: a
+# whole-file sum charged a real morning with 42 minutes of the previous afternoon.
 mk proj-y /home/u/proj-y "$(date -d '1 day ago' +%s)" old
-mk proj-y /home/u/proj-y "$(date +%s)" new
 echo '{"minutes":1,"tokens":200000}' > "$BATMAN_CONF"
-OUT=$(jq -n --arg tp "$TMP/projects/proj-y/new.jsonl" \
-    '{session_id:"t-y1", cwd:"/home/u/proj-y", transcript_path:$tp}' \
-  | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "38 active minutes" "a transcript touched today but written yesterday counts zero"
-case "$OUT" in *"76 active"*) no "yesterday's session is not summed into today";;
-  *) ok "yesterday's session is not summed into today";; esac
-
-# The same file as the open session: its own yesterday minutes drop out too.
 OUT=$(jq -n --arg tp "$TMP/projects/proj-y/old.jsonl" \
     '{session_id:"t-y2", cwd:"/home/u/proj-y", transcript_path:$tp}' \
   | bash hooks/batman.sh check | jq -r '.hookSpecificOutput.additionalContext')
-has "$OUT" "0 active minutes in this session, 38 today" "an overnight session contributes only its today half"
+has "$OUT" "BATMAN:" "the overnight session still reports its other signals"
+case "$OUT" in *"active minutes"*) no "an overnight session's yesterday minutes drop out";;
+  *) ok "an overnight session's yesterday minutes drop out";; esac
 echo '{"minutes":60,"tokens":200000}' > "$BATMAN_CONF"
 
 # --- bare-name entry points -------------------------------------------------

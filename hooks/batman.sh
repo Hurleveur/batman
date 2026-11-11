@@ -211,58 +211,6 @@ FACTS=$(jq -n -r -R --argjson mid "${MID:-0}" '
 IFS=$'\t' read -r ACTIVE HOTF HOTN ERRK ERRN EARLY LATE <<<"$FACTS"
 ACTIVE=${ACTIVE:-0}; HOTN=${HOTN:-0}; ERRN=${ERRN:-0}; EARLY=${EARLY:-0}; LATE=${LATE:-0}
 
-# The clock, across today's sessions. $ACTIVE above is this transcript alone, so a day
-# split over four sessions reads as four short ones — measured on a real one: 46 minutes
-# in the open session, 92 across the four together. Same project directory, same jq,
-# same midnight cutoff. Churn, errors and steering stay per-session on purpose: those are
-# about this attempt, not the day. The mtime test only skips files cheaply — a transcript
-# touched today but written yesterday still sums to zero, because the cutoff is applied
-# to the timestamps, not the file.
-# Incremental: re-parsing every sibling on every prompt cost 3.1s of a 4.2s check on a
-# real day (50 transcripts, 238 MB) and timed the hook out at 10s under load. Transcripts
-# only grow, so each file's bytes read, last timestamp and seconds are cached and only the
-# appended tail is parsed. Per host, per day: ~/.claude may sync between boxes, and a
-# file two boxes write is a sync conflict; a new day starts from zero anyway.
-# shortcut: a stat taken mid-append drops that one partial line; minutes barely move.
-SIBS_CACHE="$STATE_DIR/sibs-$(hostname 2>/dev/null || echo host)-$(date +%F).tsv"
-find "$STATE_DIR" -maxdepth 1 -name 'sibs-*.tsv' ! -newermt "$(date +%Y-%m-%d)" -delete 2>/dev/null
-declare -A CB CL CS
-if [ -f "$SIBS_CACHE" ]; then
-  # A bad row is dropped, so that file is parsed whole again, rather than breaking every prompt today.
-  while IFS=$'\t' read -r p b l s; do
-    [[ $b =~ ^[0-9]+$ && $l =~ ^[0-9]+$ && $s =~ ^[0-9]+$ ]] || continue
-    CB[$p]=$b; CL[$p]=$l; CS[$p]=$s
-  done < "$SIBS_CACHE"
-fi
-SIBS_NEW="$SIBS_CACHE.$$"
-SIBS_SECS=0
-: > "$SIBS_NEW"
-while IFS= read -r -d '' f; do
-  size=$(stat -c %s "$f" 2>/dev/null) || continue
-  b=${CB[$f]:-0}; l=${CL[$f]:-0}; s=${CS[$f]:-0}
-  [ "$size" -lt "$b" ] && { b=0; l=0; s=0; }
-  if [ "$size" -gt "$b" ]; then
-    # head caps the read at the stat'd size, so bytes appended meanwhile are read next time, once.
-    read -r ds nl < <(tail -c +$((b + 1)) "$f" | head -c $((size - b)) \
-      | jq -n -r -R --argjson mid "${MID:-0}" --argjson prev "$l" '
-        ([inputs | fromjson? | .timestamp? // empty | strings] | sort
-          | map(sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) as $c
-        | ((if $prev > 0 then [$prev] else [] end) + $c | sort) as $t
-        | ($t | length) as $n
-        | (if $n < 2 then 0 else
-            ([range(1; $n)] | map(select($t[.] >= $mid)
-              | ($t[.] - $t[.-1]) | if . > 300 then 300 else . end) | add) // 0
-          end) as $secs
-        | "\($secs | floor) \($t[-1] // 0 | floor)"' 2>/dev/null)
-    s=$(( s + ${ds:-0} )); l=${nl:-$l}
-  fi
-  printf '%s\t%s\t%s\t%s\n' "$f" "$size" "$l" "$s" >> "$SIBS_NEW"
-  SIBS_SECS=$(( SIBS_SECS + s ))
-done < <(find "$(dirname "$TP")" -name '*.jsonl' -newermt "$(date +%Y-%m-%d)" ! -path "$TP" -print0 2>/dev/null)
-mv -f "$SIBS_NEW" "$SIBS_CACHE" 2>/dev/null || rm -f "$SIBS_NEW"
-SIBS=$(( SIBS_SECS / 60 ))
-ACTIVE_ALL=$(( ACTIVE + SIBS ))
-
 TOKS=$(tail -80 "$TP" 2>/dev/null | jq -r 'select(.type=="assistant") | .message.usage
   | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)' 2>/dev/null \
   | sort -rn | head -1)
@@ -282,17 +230,14 @@ if [ "$ERRN" -ge $((FERR + ERR_LIMIT)) ]; then
   FERR=$ERRN
   STUCK="$STUCK Same error $ERRN times: \"$ERRK\"."
 fi
-if [ "$ACTIVE_ALL" -ge $((FMIN + MINS_LIMIT)) ]; then
-  FMIN=$(( ACTIVE_ALL / MINS_LIMIT * MINS_LIMIT ))
-  # Name both numbers when they differ, session first: "23 this session" is the one
-  # that feels true, the day total is the one that has been hiding behind it. Leading
-  # with the day total instead reads as "you've been at this 101 minutes" when the
-  # session itself just started — misleads at a glance.
-  if [ "$SIBS" -gt 0 ]; then
-    DRAG=" $ACTIVE active minutes in this session, $ACTIVE_ALL today."
-  else
-    DRAG=" $ACTIVE active minutes."
-  fi
+# Per session, on purpose. A day total summed across sessions (August to November 2026)
+# put every session of a full working day over the limit by mid-morning: it fired in 370
+# of 375 sessions, so it said nothing, and reading every sibling transcript on every
+# prompt timed the hook out. "Is this attempt still the right thing" is a question about
+# this session; the day's total, where wanted, is ActivityWatch's clause below.
+if [ "$ACTIVE" -ge $((FMIN + MINS_LIMIT)) ]; then
+  FMIN=$(( ACTIVE / MINS_LIMIT * MINS_LIMIT ))
+  DRAG=" $ACTIVE active minutes."
 fi
 if [ "$TOKS" -ge $((FTOK + TOKS_LIMIT)) ]; then
   FTOK=$(( TOKS / TOKS_LIMIT * TOKS_LIMIT ))
@@ -312,16 +257,16 @@ if [ "$EARLY" -gt 0 ] && [ "$((LATE * 100 / EARLY))" -lt "$STEER_LIMIT" ]; then
 fi
 
 # ActivityWatch, where it is running. Same deal as steering: rides an emission that was
-# already happening, never opens one. $ACTIVE_ALL now covers the day, so only one blind
-# spot is left, and it is the one no transcript can close: gaps are capped at 5 minutes
-# because a hole in the timestamps is either an hour of hand-testing or an hour at lunch,
-# and nothing in the file says which. An idle detector does. That is all this asks about
-# — measured against the day's total, so it stays quiet unless there is real work off the
-# transcript. Quiet too when aw-server is not running: it is per-machine, and ~/.claude
-# syncs between boxes while ActivityWatch's data does not.
+# already happening, never opens one. It covers the two blind spots of the session
+# clock: the rest of the day's sessions on this project, and gaps capped at 5 minutes
+# because a hole in the timestamps is either an hour of hand-testing or an hour at
+# lunch, and nothing in the file says which. An idle detector does. It stays quiet
+# unless it knows 30+ minutes more than this session. Quiet too when aw-server is not
+# running: it is per-machine, and ~/.claude syncs between boxes while ActivityWatch's
+# data does not.
 AW=$(conf aw "$(dirname "$SELF")/../bin/batman-time")
 if [ -n "$CWD" ] && [ -x "$AW" ]; then
-  DRAG="$DRAG$(timeout 5 "$AW" --hook "$CWD" "$ACTIVE_ALL" 2>/dev/null)"
+  DRAG="$DRAG$(timeout 5 "$AW" --hook "$CWD" "$ACTIVE" 2>/dev/null)"
 fi
 
 # Churn outranks the clock: it is evidence, the clock is only a prior.

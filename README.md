@@ -51,20 +51,7 @@ directory is empty *and* has no commits, he points at the new-project ritual bef
 you write code — a lived-in scratch dir like `$HOME` has no commits either, and a
 nudge that fires every session is a nudge nobody reads.
 
-**On every prompt** — one pass over the session transcript: the same file rewritten
-over and over, the same error hit again and again, context size. Plus the clock, and
-that one reads every transcript for the project, not just the open one — a day broken
-into four sessions used to report as four short ones, and on a real day that was 46
-minutes in the open session against 92 across all of them. Two bounds keep the number
-honest: gaps are capped at five minutes, so a session resumed tomorrow isn't "4287
-minutes", and only timestamps since local midnight count, so a session you opened last
-night and carried on this morning brings its today half and leaves the rest. Churn,
-errors and steering stay per-session on purpose: those are about this attempt, not the
-day. Under the
-thresholds: silence, nothing added. Over them, *once*, he names the number —
-"sync.ts written 12 times this session" — and asks for a new theory, a timebox, or
-the exit. Facts, not a request to introspect. Asking an agent whether it's stuck
-gets you a confident no; showing it the count doesn't.
+**On every prompt** — one pass over the session transcript: the same file rewritten over and over, the same error hit again and again, context size, and the session's active minutes. Two bounds keep the clock honest: gaps are capped at five minutes, so a session resumed tomorrow isn't "4287 minutes", and only timestamps since local midnight count, so a session you opened last night and carried on this morning brings its today half and leaves the rest. The clock is per session on purpose: summed across the day's sessions, it put every session of a full working day over the limit by mid-morning and fired in 370 of 375 real sessions, which says nothing. Under the thresholds: silence, nothing added. Over them, *once*, he names the number — "sync.ts written 12 times this session" — and asks for a new theory, a timebox, or the exit. Facts, not a request to introspect. Asking an agent whether it's stuck gets you a confident no; showing it the count doesn't.
 
 The same pass measures your own steering — mean prompt length, first third against
 last. A collapse rides along on a warning that was already printing; it never opens
@@ -128,15 +115,11 @@ chat, mail and note-taking titles are dropped before aggregation, not filtered
 after. Your YouTube history and your vault note names are not a productivity
 metric and Batman never fetches them.
 
-In the hook it's a clause on a warning that was already printing, never its own
-line, and it stays quiet unless it knows 30+ minutes more than the day's transcripts
-already do — which, now that those span the day, means genuine work off the
-transcript and nothing else. Silent too when aw-server isn't running: it's
-per-machine, so a synced `~/.claude` doesn't carry the data across boxes.
+In the hook it's a clause on a warning that was already printing, never its own line, and it stays quiet unless it knows 30+ minutes more than the open session — the day's other sessions on the project, or work off the transcript. Silent too when aw-server isn't running: it's per-machine, so a synced `~/.claude` doesn't carry the data across boxes.
 
 ```
-BATMAN: 92 active minutes on this today, 46 in this session. 160 active minutes
-on project today across all sessions (ActivityWatch). Long runs are where the
+BATMAN: 74 active minutes. 160 active minutes on project today across all
+sessions (ActivityWatch). Long runs are where the
 wrong work hides. [...]
 ```
 
